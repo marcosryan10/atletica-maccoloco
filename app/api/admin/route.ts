@@ -4,6 +4,8 @@ import { getDb } from '../../../db';
 import { applications,publications,partners } from '../../../db/schema';
 import { desc,eq } from 'drizzle-orm';
 import { isMaccoAdmin } from '../../../lib/admin-auth';
+import {publicationImage} from '../../../lib/publication-image';
+import {readJSON,shopError} from '../../../lib/shop-server';
 export const dynamic='force-dynamic';
 const deny=()=>Response.json({error:'Acesso exclusivo da direção autorizada.'},{status:403});
 async function authorized(){const user=await getMaccolocoUser();return user?isMaccoAdmin(user.email):false;}
@@ -15,7 +17,7 @@ export async function POST(request:Request){
  if(request.headers.get('origin')!==new URL(request.url).origin)return deny();
  if(!await authorized())return deny();
  if(Number(request.headers.get('content-length')||0)>800000)return Response.json({error:'Conteúdo muito extenso.'},{status:413});
- try{const raw=await request.json();if(!raw||typeof raw!=='object'||Array.isArray(raw))return Response.json({error:'Dados inválidos.'},{status:400});const b=raw as Record<string,any>;const db=getDb();
+ try{const raw=await readJSON(request,800000);if(!raw||typeof raw!=='object'||Array.isArray(raw))return Response.json({error:'Dados inválidos.'},{status:400});const b=raw as Record<string,any>;const db=getDb();
  if(b.action==='partner'){
  const text=(v:unknown,n:number)=>typeof v==='string'?v.trim().slice(0,n):'';
  const name=text(b.name,100),description=text(b.description,800),image=text(b.image,700001),url=text(b.url,300);
@@ -43,9 +45,11 @@ export async function POST(request:Request){
  const kind=b.kind==='event'?'event':'news';const title=trim(b.title,120),summary=trim(b.summary,300),body=trim(b.body,10000),date=trim(b.date,40),location=trim(b.location,160),category=trim(b.category,40)|| (kind==='event'?'Integração':'Novidades');
  if(title.length<4||summary.length<10||body.length<10||!/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(date)||!Number.isFinite(Date.parse(date)))return Response.json({error:'Preencha título, resumo, texto e uma data válida.'},{status:400});
  const id=typeof b.id==='string'&&/^[a-zA-Z0-9-]{1,80}$/.test(b.id)?b.id:crypto.randomUUID();
- const record={id,kind,title,summary,body,date,location,category,published:b.published?1:0,updatedAt:new Date().toISOString()};
+ let image:string|undefined;try{image=b.image===undefined?undefined:publicationImage(b.image);}catch(e){return Response.json({error:e instanceof Error?e.message:'Imagem inválida.'},{status:400});}
+ const imageAlt=typeof b.imageAlt==='string'?b.imageAlt.trim().slice(0,160):undefined;
+ const record={id,kind,title,summary,body,date,location,category,...(image===undefined?{}:{image}),...(imageAlt===undefined?{}:{imageAlt}),published:b.published?1:0,updatedAt:new Date().toISOString()};
  await db.insert(publications).values(record).onConflictDoUpdate({target:publications.id,set:record});return Response.json({ok:true,id});
  }
  return Response.json({error:'Ação inválida.'},{status:400});
- }catch{return Response.json({error:'Não foi possível salvar a alteração.'},{status:503});}
+ }catch(e){return shopError(e);}
 }

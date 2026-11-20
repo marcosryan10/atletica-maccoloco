@@ -7,6 +7,7 @@ export const applications = sqliteTable('athlete_applications', {
 });
 export const publications = sqliteTable('publications', {
  id: text('id').primaryKey(), kind: text('kind').notNull(), title: text('title').notNull(), category: text('category').notNull(),
+ image:text('image').notNull().default(''),imageAlt:text('image_alt').notNull().default(''),
  summary: text('summary').notNull(), body: text('body').notNull(), date: text('date').notNull(), location: text('location').notNull().default(''),
  published: integer('published').notNull().default(0), updatedAt: text('updated_at').notNull(),
 });

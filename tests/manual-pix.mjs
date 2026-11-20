@@ -21,7 +21,7 @@ const qr=qrcode(0,'M');qr.addData(payload,'Byte');qr.make();const scale=6,margin
 for(let y=0;y<side;y++)for(let x=0;x<side;x++){const row=Math.floor(y/scale)-margin,col=Math.floor(x/scale)-margin,dark=row>=0&&col>=0&&row<n&&col<n&&qr.isDark(row,col),p=(y*side+x)*4;rgba[p]=rgba[p+1]=rgba[p+2]=dark?0:255;rgba[p+3]=255;}
 assert.equal(jsQR(rgba,side,side)?.data,payload);
 const db=new DatabaseSync(':memory:');
-for(const migration of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql'])db.exec(await readFile(new URL('../drizzle/'+migration,import.meta.url),'utf8'));
+for(const migration of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql'])db.exec(await readFile(new URL('../drizzle/'+migration,import.meta.url),'utf8'));
 const columns=db.prepare('PRAGMA table_info(shop_orders)').all().map(c=>c.name);for(const col of ['payment_method','pix_payload','confirmed_by','confirmed_at','payment_note'])assert.ok(columns.includes(col));
 assert.equal(db.prepare('SELECT count(*) AS count FROM shop_manual_config').get().count,0);
 db.close();
