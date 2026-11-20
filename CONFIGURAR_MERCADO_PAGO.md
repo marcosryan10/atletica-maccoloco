@@ -2,7 +2,7 @@
 
 # Ativação da loja MaccoLoco
 
-A estrutura usa o banco D1 para produtos, pedidos e situações de pagamento; R2 guarda imagens de produtos. A loja não importa os antigos testes do navegador e não recebe dados de cartão. A cobrança acontece no Checkout Pro do Mercado Pago via Preferences API.
+A estrutura usa o banco D1 para produtos, pedidos e situações de pagamento; Imagens pequenas (até 200 KB) podem ficar no próprio D1; R2 é opcional para arquivos maiores. A loja não importa os antigos testes do navegador e não recebe dados de cartão. A cobrança acontece no Checkout Pro do Mercado Pago via Preferences API.
 
 ## O que o responsável precisa fazer
 

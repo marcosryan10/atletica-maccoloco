@@ -4,7 +4,7 @@ Sistema da Associação Atlética Unificada MaccoLoco, formada por estudantes do
 
 ## Hospedar a partir do GitHub
 
-O sistema completo é uma aplicação **React/Vinext para Cloudflare Workers**, com **D1** para os dados e **R2** para imagens. A implantação pode acompanhar a branch `main` por **Workers Builds**.
+O sistema completo é uma aplicação **React/Vinext para Cloudflare Workers**, com **D1** para os dados e imagens pequenas no próprio D1 (**R2** opcional). A implantação pode acompanhar a branch `main` por **Workers Builds**.
 
 **Comece pelo [guia de hospedagem na Cloudflare](HOSPEDAR_NA_CLOUDFLARE.md).** Ele explica criação dos recursos, comandos de build/deploy, domínio e autenticação da direção. Não é um projeto para GitHub Pages nem um upload estático para Cloudflare Pages.
 
@@ -45,7 +45,7 @@ A entrada no painel depende de Access configurado; o desenvolvimento não habili
 
 ## Publicação
 
-No Workers Builds: build `npm run build`, deploy `npm run deploy:cloudflare`. O script aplica migrações no D1 configurado e publica a saída do build. O identificador de banco em `wrangler.jsonc` é um marcador e deve ser substituído pelo real. Use recursos separados para prévias e produção.
+No Workers Builds: build `npm run build`, deploy `npm run deploy:cloudflare`. O script aplica migrações no D1 configurado e publica a saída do build. O identificador real do banco da Atlética está configurado em `wrangler.jsonc`. Use recursos separados para prévias e produção.
 
 O workflow do GitHub executa verificação de tipos, testes de autenticação e pagamentos, e compilação. Ele não recebe credenciais de produção e não publica sozinho na Cloudflare.
 

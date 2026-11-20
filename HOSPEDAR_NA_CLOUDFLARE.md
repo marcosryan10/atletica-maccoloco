@@ -1,6 +1,8 @@
+> Banco da Atlética configurado: `maccoloco-db`. O R2 permanece opcional para não exigir assinatura adicional.
+
 # Hospedar o sistema completo a partir do GitHub
 
-Este repositório contém a aplicação React/Vinext, o servidor, as migrações do banco D1 e o armazenamento R2 para imagens. O destino é **Cloudflare Workers com Workers Builds**, conectado ao GitHub. GitHub Pages e o upload estático do Cloudflare Pages não executam esta loja.
+Este repositório contém a aplicação React/Vinext, o servidor, as migrações do banco D1 e armazenamento de imagens pequenas no D1, com R2 opcional. O destino é **Cloudflare Workers com Workers Builds**, conectado ao GitHub. GitHub Pages e o upload estático do Cloudflare Pages não executam esta loja.
 
 A hospedagem anterior continua independente. Este repositório não contém banco de compradores, cadastros, credenciais ou a chave de criptografia daquele ambiente. A implantação em outra conta começa com recursos vazios. Não copie os testes locais para produção.
 
@@ -12,10 +14,9 @@ Você pode criar os recursos pelo painel da Cloudflare ou pelo terminal, com Nod
 npm ci
 npx wrangler login
 npx wrangler d1 create maccoloco-db
-npx wrangler r2 bucket create maccoloco-imagens
 ```
 
-Copie o identificador real do banco retornado pela Cloudflare para `database_id` em `wrangler.jsonc`, substituindo os zeros. O vínculo deve se chamar **DB**. O vínculo do bucket deve se chamar **BUCKET**, apontando para `maccoloco-imagens`. Se escolher nomes diferentes para os recursos, atualize o arquivo antes de publicar.
+Copie o identificador real do banco retornado pela Cloudflare para `database_id` em `wrangler.jsonc`, substituindo os zeros. O vínculo deve se chamar **DB**. O R2 é opcional e não está exigido nesta configuração. Sem ele, imagens de produtos de até 200 KB são validadas e guardadas no D1. Se decidir ativar R2, crie um bucket e adicione um vínculo **BUCKET** no arquivo. Se escolher nomes diferentes para os recursos, atualize o arquivo antes de publicar.
 
 O script de publicação bloqueia um banco sem identificador real. As migrações são aplicadas antes de publicar o Worker. Não aponte o projeto para um banco de outro sistema. A ativação do R2 e os limites/custos dependem da sua conta Cloudflare; confira o painel antes de habilitar recursos.
 
@@ -82,7 +83,7 @@ Para metadados de compartilhamento, configure `PUBLIC_SITE_URL` como variável d
 - Painel fechado para visitantes; login autorizado funcionando; contatos não expostos nas APIs públicas.
 - Cadastro de atleta gravado e visível à direção.
 - Compra de teste com confirmação autenticada; pedido e ranking no ambiente correto.
-- Produto com preço, prazo e condições de retirada definidos; imagens carregando pelo R2.
+- Produto com preço, prazo e condições de retirada definidos; imagens carregando corretamente.
 - Cópias de segurança e recuperação dos dados organizadas; acesso ao GitHub, à Cloudflare e ao Mercado Pago restrito aos responsáveis.
 
 Os recursos e o login da nova conta Cloudflare precisam ser configurados por quem possui acesso a ela. A presença dos arquivos no GitHub não significa que a nova hospedagem já foi ativada. O site anteriormente publicado permanece disponível no endereço anterior até a migração ser concluída.

@@ -31,7 +31,7 @@ export async function POST(request:Request){try{
  const match=image.match(/^data:image\/(png|jpeg|webp);base64,(.+)$/)!;let bytes:Uint8Array;try{bytes=Uint8Array.from(atob(match[2]),c=>c.charCodeAt(0));}catch{throw new ShopError(400,'Imagem inválida.');}
  const png=match[1]==='png'&&[137,80,78,71,13,10,26,10].every((v,i)=>bytes[i]===v),jpg=match[1]==='jpeg'&&bytes[0]===255&&bytes[1]===216&&bytes[2]===255,webp=match[1]==='webp'&&new TextDecoder().decode(bytes.slice(0,4))==='RIFF'&&new TextDecoder().decode(bytes.slice(8,12))==='WEBP';
  if(bytes.length>500*1024||!(png||jpg||webp))throw new ShopError(400,'O arquivo não é uma imagem PNG, JPG ou WebP válida de até 500 KB.');
- if(!env.BUCKET)throw new ShopError(503,'O armazenamento de imagens não está disponível.');const imageId=crypto.randomUUID();await env.BUCKET.put('shop/'+imageId,bytes,{httpMetadata:{contentType:'image/'+match[1]}});image='/api/shop/image?id='+imageId;
+ if(env.BUCKET){const imageId=crypto.randomUUID();await env.BUCKET.put('shop/'+imageId,bytes,{httpMetadata:{contentType:'image/'+match[1]}});image='/api/shop/image?id='+imageId;}else if(bytes.length>200*1024){throw new ShopError(400,'Use uma imagem de até 200 KB.');}
  }
  const record={id,name,category,description,deliveryInfo,image,sizes:JSON.stringify(sizes),priceCents:price,active:p.active?1:0,illustration:['abada','tirante','other'].includes(p.illustration)?p.illustration:'other',updatedAt:now};
  await db.insert(shopProducts).values(record).onConflictDoUpdate({target:shopProducts.id,set:record});return json({ok:true});

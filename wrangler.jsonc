@@ -3,10 +3,30 @@
   "name": "atletica-maccoloco",
   "main": "worker/index.ts",
   "compatibility_date": "2026-05-15",
-  "compatibility_flags": ["nodejs_compat"],
-  "assets": {"directory": "dist/client", "binding": "ASSETS"},
-  "d1_databases": [{"binding": "DB", "database_name": "maccoloco-db", "database_id": "00000000-0000-4000-8000-000000000000", "migrations_dir": "drizzle"}],
-  "r2_buckets": [{"binding": "BUCKET", "bucket_name": "maccoloco-imagens"}],
-  "vars": {"CF_ACCESS_TEAM_DOMAIN": "", "CF_ACCESS_AUD": ""},
-  "observability": {"enabled": true, "logs": {"invocation_logs": false}}
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": "dist/client",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "maccoloco-db",
+      "database_id": "541ba1f8-c80b-4954-a94e-34a39a72e308",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "vars": {
+    "CF_ACCESS_TEAM_DOMAIN": "",
+    "CF_ACCESS_AUD": ""
+  },
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "invocation_logs": false
+    }
+  },
+  "account_id": "713bfc81812daf52c1215a9faabe4f87"
 }
