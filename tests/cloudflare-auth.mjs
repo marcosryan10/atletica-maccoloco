@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {generateKeyPair,SignJWT,exportJWK,createLocalJWKSet} from 'jose';
+import {verifyAccessIdentity,accessConfigured} from '../lib/cloudflare-access.ts';
+const config={teamDomain:'fixture.cloudflareaccess.com',audience:'a'.repeat(64)},issuer='https://'+config.teamDomain;
+const {privateKey,publicKey}=await generateKeyPair('RS256');const jwk=await exportJWK(publicKey);jwk.kid='fixture';const keys=createLocalJWKSet({keys:[jwk]});
+const token=await new SignJWT({email:'associacaoatleticamaccoloco@gmail.com',type:'app'}).setProtectedHeader({alg:'RS256',kid:'fixture'}).setIssuer(issuer).setAudience(config.audience).setSubject('fixture-user').setIssuedAt().setExpirationTime('5m').sign(privateKey);
+assert.equal((await verifyAccessIdentity(token,config,keys))?.email,'associacaoatleticamaccoloco@gmail.com');
+assert.equal(await verifyAccessIdentity(null,config,keys),null);
+assert.equal(await verifyAccessIdentity(token,{...config,audience:'b'.repeat(64)},keys),null);
+assert.equal(await verifyAccessIdentity(token,{...config,teamDomain:'other.cloudflareaccess.com'},keys),null);
+assert.equal(await verifyAccessIdentity(token,{...config,audience:''},keys),null);
+assert.equal(accessConfigured({...config,teamDomain:'fixture.cloudflareaccess.com.attacker.example'}),false);
+const parts=token.split('.');parts[1]=Buffer.from(JSON.stringify({email:'attacker@example.invalid',type:'app',sub:'forged',exp:9999999999,iat:1,iss:issuer,aud:config.audience})).toString('base64url');assert.equal(await verifyAccessIdentity(parts.join('.'),config,keys),null);
+const expired=await new SignJWT({email:'associacaoatleticamaccoloco@gmail.com',type:'app'}).setProtectedHeader({alg:'RS256',kid:'fixture'}).setIssuer(issuer).setAudience(config.audience).setSubject('fixture').setIssuedAt(1).setExpirationTime(2).sign(privateKey);assert.equal(await verifyAccessIdentity(expired,config,keys),null);
+console.log('PASS Cloudflare Access: valid JWT, forged payload, expired token, wrong audience/issuer and missing configuration');

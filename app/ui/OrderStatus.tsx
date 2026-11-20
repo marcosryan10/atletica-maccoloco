@@ -1,0 +1,9 @@
+'use client';
+import {useEffect,useState} from 'react';
+import SiteHeader from './SiteHeader';
+import {priceLabel,statusLabels} from '../../lib/shop';
+export default function OrderStatus(){const [order,setOrder]=useState<any>(null),[error,setError]=useState(''),[loading,setLoading]=useState(true);
+ async function load(){setLoading(true);setError('');try{const id=new URL(window.location.href).searchParams.get('id')||'',r=await fetch('/api/shop/order?id='+encodeURIComponent(id),{cache:'no-store'}),v:any=await r.json();if(!r.ok)throw Error(v.error);setOrder(v);}catch(e){setError(e instanceof Error?e.message:'Não foi possível consultar.');}finally{setLoading(false);}}
+ useEffect(()=>{load();},[]);
+ return <><SiteHeader/><main className="order-status-page wrap"><span className="eyebrow">Acompanhamento do pedido</span><h1>SEU PEDIDO.</h1>{loading&&<p role="status">Consultando confirmação…</p>}{error&&<p role="alert" className="form-error">{error}</p>}{order&&<section className="order-status-card"><span className="status-tag">{order.mode==='test'?'TESTE · ':''}{statusLabels[order.status]||'Em análise'}</span><h2>{order.productName}</h2><p>Tamanho: {order.size} · Quantidade: {order.quantity}</p><strong>{priceLabel(order.totalCents/100)}</strong><p>{order.status==='paid'?'Pagamento confirmado pelo Mercado Pago. A direção acompanhará a preparação do seu pedido.':'O retorno do checkout não confirma pagamento. A situação é atualizada após a confirmação do Mercado Pago; pagamentos pendentes podem levar algum tempo.'}</p><p>Preparação: {order.fulfillment}</p><small>Referência: {order.id}</small></section>}<div className="order-status-actions"><button className="button black" onClick={load} disabled={loading}>Atualizar situação</button><a className="text-link" href="https://www.instagram.com/atletica.maccoloco/" target="_blank" rel="noreferrer">Falar com a direção</a><a href="/produtos" className="text-link">Voltar à loja</a></div></main></>;
+}

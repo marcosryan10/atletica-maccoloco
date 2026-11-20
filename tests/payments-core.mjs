@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {createHmac} from 'node:crypto';
+import {sealCredentials,openCredentials} from '../lib/credential-crypto.ts';
+import {verifyMPNotification,validatePayment,orderPaymentStatus,trustedCheckoutURL,cents} from '../lib/payment-core.ts';
+const secret='local-fixture-webhook-secret-only',id='123456789',requestId='fixture-req-123',ts='1742505638683';
+const localKey='c'.repeat(64),credentials={token:'fixture-access-token-not-real',webhookSecret:secret};
+const sealed=await sealCredentials(localKey,credentials);assert.ok(!sealed.includes(credentials.token));assert.deepEqual(await openCredentials(localKey,sealed),credentials);assert.notEqual(sealed,await sealCredentials(localKey,credentials));await assert.rejects(()=>openCredentials('d'.repeat(64),sealed));const tampered=JSON.parse(sealed);tampered.data[0]^=1;await assert.rejects(()=>openCredentials(localKey,JSON.stringify(tampered)));
+// Generate an independent fixture with Node crypto, not the implementation under test.
+const signature=createHmac('sha256',secret).update(`id:${id};request-id:${requestId};ts:${ts};`).digest('hex');
+assert.equal(await verifyMPNotification(secret,`ts=${ts},v1=${signature}`,requestId,id),true);
+assert.equal(await verifyMPNotification(secret,`ts=${ts},v1=${signature}`,requestId,'987654321'),false);
+assert.equal(await verifyMPNotification(secret,`ts=${ts},v1=${signature}`,'other-request',id),false);
+assert.equal(await verifyMPNotification('wrong-secret',`ts=${ts},v1=${signature}`,requestId,id),false);
+assert.equal(await verifyMPNotification(secret,'','',id),false);
+const order={id:'test-order-1',totalCents:8000,mode:'live'};
+const payment={id:123,external_reference:order.id,collector_id:456,currency_id:'BRL',transaction_amount:80,live_mode:true,status:'approved',date_last_updated:'2026-11-20T15:00:00Z'};
+assert.equal(validatePayment(payment,order,'456'),true);
+for(const changed of [{transaction_amount:0.01},{collector_id:999},{currency_id:'USD'},{external_reference:'another-order'},{live_mode:false},{date_last_updated:'invalid'}])assert.equal(validatePayment({...payment,...changed},order,'456'),false);
+const record={id:'123',status:'approved',amountCents:8000,refundedCents:0,providerUpdatedAt:payment.date_last_updated};
+assert.equal(orderPaymentStatus([record],8000),'paid');assert.equal(orderPaymentStatus([record,{...record,id:'124'}],8000),'review');assert.equal(orderPaymentStatus([{...record,status:'refunded',refundedCents:8000}],8000),'refunded');assert.equal(orderPaymentStatus([{...record,refundedCents:2000}],8000),'partially_refunded');assert.equal(orderPaymentStatus([{...record,status:'charged_back'}],8000),'charged_back');assert.equal(orderPaymentStatus([{...record,status:'pending'}],8000),'pending');assert.equal(orderPaymentStatus([{...record,status:'rejected'}],8000),'failed');
+assert.equal(cents(79.9),7990);assert.equal(cents(1.001),null);assert.equal(cents(-1),null);
+assert.equal(trustedCheckoutURL('https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=123'),true);for(const url of ['javascript:alert(1)','http://www.mercadopago.com.br/','https://www.mercadopago.com.br.attacker.example/','https://user:password@www.mercadopago.com.br/'])assert.equal(trustedCheckoutURL(url),false);
+console.log('PASS payment security: authentic/tampered HMAC, payment amount/currency/account/order/mode, refund/chargeback/duplicate states and redirect allowlist');
