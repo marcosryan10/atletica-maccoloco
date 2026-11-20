@@ -20,7 +20,9 @@
   ],
   "vars": {
     "CF_ACCESS_TEAM_DOMAIN": "",
-    "CF_ACCESS_AUD": ""
+    "CF_ACCESS_AUD": "",
+    "AUTH_SUPABASE_URL": "https://upbjaybcpiqxfgcljerz.supabase.co",
+    "AUTH_SUPABASE_KEY": "sb_publishable_ZJW6zNBscm_12hWKp91OHw_k4VG5MAm"
   },
   "observability": {
     "enabled": true,
@@ -28,5 +30,6 @@
       "invocation_logs": false
     }
   },
-  "account_id": "713bfc81812daf52c1215a9faabe4f87"
+  "account_id": "713bfc81812daf52c1215a9faabe4f87",
+  "keep_vars": true
 }

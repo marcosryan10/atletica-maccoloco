@@ -18,5 +18,6 @@ jobs:
       - run: npm ci --no-audit --no-fund
       - run: npm run check
       - run: npm run test:auth
+      - run: npm run test:password-auth
       - run: npm run test:payments
       - run: npm run build

@@ -1,0 +1,3 @@
+'use client';
+import {useEffect} from 'react';
+export default function AdminSession(){useEffect(()=>{let running=false,disposed=false;const refresh=async()=>{if(running||document.visibilityState!=='visible')return;running=true;try{const r=await fetch('/api/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});if(!r.ok&&r.status!==429&&!disposed)window.location.replace('/login');}catch{}finally{running=false;}};const timer=setInterval(refresh,300000);window.addEventListener('focus',refresh);return()=>{disposed=true;clearInterval(timer);window.removeEventListener('focus',refresh);};},[]);return null;}

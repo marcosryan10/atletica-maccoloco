@@ -1,2 +1,2 @@
-export const metadata={title:'Acesso da direção | MaccoLoco',robots:{index:false}};
-export default function AccessPage(){return <main className="access-page"><a className="wordmark" href="/">MACCOLOCO</a><span className="eyebrow">Área da direção</span><h1>ACESSO<br/>PROTEGIDO.</h1><p>O painel usa a identificação verificada do Cloudflare Access. Entre com o e-mail autorizado da associação.</p><p>Se esta tela continuar aparecendo após o login, a configuração de proteção do painel ainda precisa ser concluída pelo responsável pela hospedagem.</p><a className="button black" href="/admin" target="_top">Entrar no painel</a><a className="text-link" href="/">Voltar ao site</a></main>}
+import {redirect} from 'next/navigation';
+export default function Page(){redirect('/login');}

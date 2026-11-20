@@ -44,17 +44,11 @@ npm run build
 npm run deploy:cloudflare
 ```
 
-## 3. Proteger o painel com Cloudflare Access
+## 3. Ativar o login da direção
 
-O login da hospedagem anterior foi substituído. Esta versão **não confia em cabeçalhos `oai-authenticated-user-*`**. Ela verifica a assinatura do JWT do Cloudflare Access com as chaves públicas oficiais, além de emissor, audiência, validade e e-mail autorizado. Sem configuração ou identificação válida, as APIs administrativas recusam acesso.
+A área da direção usa uma página própria de e-mail e senha, integrada ao Supabase Auth. Siga [CONFIGURAR_LOGIN.md](CONFIGURAR_LOGIN.md). Configure os valores de servidor `AUTH_SUPABASE_URL` e `AUTH_SUPABASE_KEY`, crie/convidе o e-mail autorizado e confirme a entrega da mensagem de ativação. O titular define a senha na página protegida, sem publicá-la no código.
 
-1. Conecte um domínio próprio ao Worker. O endereço `workers.dev` pode ser usado para conferir a parte pública, mas o painel deve ser configurado no domínio protegido pelo Access.
-2. Em **Zero Trust → Access → Applications**, crie uma aplicação **Self-hosted** para os caminhos administrativos desse domínio. Na mesma aplicação, inclua `/admin`, `/admin/*`, `/api/admin` e `/api/admin/*`. Não proteja o site inteiro: visitantes e notificações de pagamento precisam acessar as rotas públicas.
-3. Crie uma política Allow somente para `associacaoatleticamaccoloco@gmail.com`. Você pode usar o código por e-mail do Access ou um provedor de identidade configurado por você. A aplicação também confere esse e-mail no servidor.
-4. Copie o domínio da equipe, como `sua-equipe.cloudflareaccess.com`, e o **Application Audience (AUD)** da aplicação. Preencha `CF_ACCESS_TEAM_DOMAIN` e `CF_ACCESS_AUD` em `wrangler.jsonc` e confirme a alteração no GitHub. São identificadores de configuração, não senhas. O domínio é informado sem `https://`.
-5. Publique novamente e teste `/admin` em uma janela anônima. Sem entrar, `/api/admin` e `/api/admin/shop` devem ser recusados ou apresentar o desafio do Access. Entrando com o e-mail autorizado, o painel deve carregar. Cabeçalhos inventados pelo visitante não concedem acesso.
-
-Um JWT assinado no cookie `CF_Authorization` também é validado, permitindo que a direção use o checkout de teste nas rotas públicas sem fechar a loja aos visitantes. Apenas possuir um cookie ou um cabeçalho com nome conhecido não é suficiente: a assinatura e as demais condições precisam ser válidas.
+Sem esses valores ou sem usuário confirmado, o login permanece desabilitado e as APIs administrativas recusam acesso. Nenhum cabeçalho de identidade enviado por um visitante concede acesso. Cloudflare Access pode existir como proteção externa adicional, mas não substitui a configuração deste login.
 
 ## 4. Configurar a chave da loja
 

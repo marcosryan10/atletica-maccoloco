@@ -16,7 +16,8 @@
     "test:auth": "node --experimental-strip-types tests/cloudflare-auth.mjs",
     "deploy:cloudflare": "node scripts/deploy-cloudflare.mjs",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote --config wrangler.jsonc",
-    "test:payments": "node --experimental-strip-types tests/payments-core.mjs"
+    "test:payments": "node --experimental-strip-types tests/payments-core.mjs",
+    "test:password-auth": "node --experimental-strip-types tests/password-auth.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
