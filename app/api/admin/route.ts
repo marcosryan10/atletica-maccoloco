@@ -1,4 +1,4 @@
-import { getChatGPTUser } from '../../chatgpt-auth';
+import { getMaccolocoUser } from '../../maccoloco-auth';
 import { adminEmail,initialNews } from '../../../lib/maccoloco';
 import { getDb } from '../../../db';
 import { applications,publications,partners } from '../../../db/schema';
@@ -6,7 +6,7 @@ import { desc,eq } from 'drizzle-orm';
 import { isMaccoAdmin } from '../../../lib/admin-auth';
 export const dynamic='force-dynamic';
 const deny=()=>Response.json({error:'Acesso exclusivo da direção autorizada.'},{status:403});
-async function authorized(){const user=await getChatGPTUser();return user?isMaccoAdmin(user.email):false;}
+async function authorized(){const user=await getMaccolocoUser();return user?isMaccoAdmin(user.email):false;}
 export async function GET(){
  if(!await authorized())return deny();
  try{const db=getDb();const [entries,posts,companies]=await Promise.all([db.select().from(applications).orderBy(desc(applications.createdAt)),db.select().from(publications),db.select().from(partners)]);const merged=new Map(initialNews.map(n=>[n.id,n]));for(const row of posts)merged.set(row.id,row as any);return Response.json({applications:entries,publications:[...merged.values()],partners:companies},{headers:{'Cache-Control':'private, no-store'}});}catch{return Response.json({error:'Não foi possível carregar os dados.'},{status:503});}

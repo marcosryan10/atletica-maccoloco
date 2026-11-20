@@ -15,7 +15,7 @@ try{
  const api={};
  for(const [name,path] of Object.entries(routes)){
  const outfile=join(dir,name+'.mjs');
- await build({entryPoints:[resolve(path)],outfile,bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'test-runtime',setup(b){b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'workers',namespace:'fixture'}));b.onResolve({filter:/chatgpt-auth$/},()=>({path:'identity',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='workers'?'export const env=globalThis.__manualShopTest.env;':'export async function getChatGPTUser(){return globalThis.__manualShopTest.user;}',loader:'js'}));}}]});
+ await build({entryPoints:[resolve(path)],outfile,bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'test-runtime',setup(b){b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'workers',namespace:'fixture'}));b.onResolve({filter:/maccoloco-auth$/},()=>({path:'identity',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='workers'?'export const env=globalThis.__manualShopTest.env;':'export async function getMaccolocoUser(){return globalThis.__manualShopTest.user;}',loader:'js'}));}}]});
  api[name]=await import(pathToFileURL(outfile));
  }
  const origin='https://test.maccoloco.example';

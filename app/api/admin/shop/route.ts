@@ -6,7 +6,7 @@ import {productView} from '../../../../lib/shop';
 import {cents} from '../../../../lib/payment-core';
 import {productTemplates} from '../../../../lib/shop-templates';
 import {validPixKey,pixText,canConfirmManual} from '../../../../lib/pix';
-import {getChatGPTUser} from '../../../chatgpt-auth';
+import {getMaccolocoUser} from '../../../maccoloco-auth';
 import {env} from 'cloudflare:workers';
 export const dynamic='force-dynamic';
 export async function GET(request:Request){try{
@@ -48,7 +48,7 @@ export async function POST(request:Request){try{
  if(typeof b.id!=='string'||typeof b.note!=='string'||b.note.trim().length<3||b.note.length>160||b.confirmReceived!==true)throw new ShopError(400,'Confirme o recebimento e registre uma referência da conferência.');
  const [order]=await db.select().from(shopOrders).where(eq(shopOrders.id,b.id));
  if(!order||!canConfirmManual(order)||b.totalCents!==order.totalCents)throw new ShopError(409,'Pedido indisponível para confirmação. Atualize a lista.');
- const user=await getChatGPTUser();if(!user)throw new ShopError(403,'Acesso não autorizado.');
+ const user=await getMaccolocoUser();if(!user)throw new ShopError(403,'Acesso não autorizado.');
  const changed=await db.update(shopOrders).set({status:'paid',confirmedAt:now,confirmedBy:user.email,paymentNote:b.note.trim(),updatedAt:now}).where(and(eq(shopOrders.id,order.id),eq(shopOrders.status,'pending'),eq(shopOrders.paymentMethod,order.paymentMethod))).returning({id:shopOrders.id});
  if(!changed.length)throw new ShopError(409,'Este pedido já foi atualizado.');return json({ok:true});
  }
