@@ -1,6 +1,6 @@
 import {env} from 'cloudflare:workers';
 import {getDb} from '../db';
-import {shopConfig,shopOrders,shopPayments} from '../db/schema';
+import {shopConfig,shopOrders,shopPayments,shopManualConfig} from '../db/schema';
 import {eq,sql} from 'drizzle-orm';
 import {getChatGPTUser} from '../app/chatgpt-auth';
 import {isMaccoAdmin} from './admin-auth';
@@ -21,13 +21,14 @@ function encryptionSecret(){const key=(env as unknown as Record<string,string>).
 export async function encryptCredentials(value:{token:string;webhookSecret:string}){return sealCredentials(encryptionSecret(),value);}
 export async function paymentConfig(){const [row]=await getDb().select().from(shopConfig).where(eq(shopConfig.id,'mercado-pago'));if(!row)return null;return {...row,...await openCredentials(encryptionSecret(),row.encryptedCredentials)};}
 export async function mpFetch(path:string,token:string,options:RequestInit={},transport:typeof fetch=fetch){const r=await transport('https://api.mercadopago.com'+path,{...options,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...options.headers},signal:AbortSignal.timeout(12000)});if(!r.ok)throw new ShopError(502,'O Mercado Pago não confirmou a operação. Confira a conta e tente novamente.');return await r.json() as any;}
-export async function publicConfig(){const [row]=await getDb().select().from(shopConfig).where(eq(shopConfig.id,'mercado-pago'));const admin=await isShopAdmin();return {mode:row?.mode||'disabled',checkoutEnabled:row?.mode==='live'||(row?.mode==='test'&&admin),testMode:row?.mode==='test',configured:Boolean(row)};}
+export async function manualConfig(){const [row]=await getDb().select().from(shopManualConfig).where(eq(shopManualConfig.id,'manual'));return row||{id:'manual',pixKey:'',receiverName:'',receiverCity:'',pixEnabled:0,cashEnabled:0};}
+export async function publicConfig(){const c=await manualConfig();return {checkoutEnabled:Boolean(c.pixEnabled||c.cashEnabled),pixEnabled:Boolean(c.pixEnabled),cashEnabled:Boolean(c.cashEnabled),testMode:false,mode:'live'};}
 export function sessionCookie(request:Request){const cookieName=new URL(request.url).protocol==='https:'?'__Host-maccoloco-shop':'maccoloco-shop';const match=request.headers.get('cookie')?.split(';').map(c=>c.trim()).find(c=>c.startsWith(cookieName+'='))?.slice(cookieName.length+1);return {name:cookieName,token:match&&/^[a-f0-9]{64}$/.test(match)?match:null};}
-export async function limitShop(request:Request,scope:string,max=8){const ip=request.headers.get('cf-connecting-ip')||'local';const window=Math.floor(Date.now()/600000);const id=await hmac(encryptionSecret(),scope+':'+ip+':'+window);const result=await env.DB!.prepare('INSERT INTO shop_rate_limits (id,hits,expires_at) VALUES (?,1,?) ON CONFLICT(id) DO UPDATE SET hits=hits+1 RETURNING hits').bind(id,(window+1)*600000).first<{hits:number}>();if(!result||result.hits>max)throw new ShopError(429,'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.');await env.DB!.prepare('DELETE FROM shop_rate_limits WHERE expires_at < ?').bind(Date.now()).run();}
+export async function limitShop(request:Request,scope:string,max=8){const ip=request.headers.get('cf-connecting-ip')||'local';const window=Math.floor(Date.now()/600000);const id=await sha256('macco-shop:'+new URL(request.url).hostname+':'+scope+':'+ip+':'+window);const result=await env.DB!.prepare('INSERT INTO shop_rate_limits (id,hits,expires_at) VALUES (?,1,?) ON CONFLICT(id) DO UPDATE SET hits=hits+1 RETURNING hits').bind(id,(window+1)*600000).first<{hits:number}>();if(!result||result.hits>max)throw new ShopError(429,'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.');await env.DB!.prepare('DELETE FROM shop_rate_limits WHERE expires_at < ?').bind(Date.now()).run();}
 export async function synchronizePayment(paymentId:string){
  if(!/^\d{1,30}$/.test(paymentId))throw new ShopError(400,'Pagamento inválido.');const config=await paymentConfig();if(!config)throw new ShopError(503,'Pagamento não configurado.');
  const payment=await mpFetch('/v1/payments/'+paymentId,config.token);if(String(payment.id)!==paymentId)throw new ShopError(409,'Pagamento divergente.');
- const db=getDb(),[order]=await db.select().from(shopOrders).where(eq(shopOrders.id,String(payment.external_reference||'')));if(!order)throw new ShopError(404,'Pedido não encontrado.');
+ const db=getDb(),[order]=await db.select().from(shopOrders).where(eq(shopOrders.id,String(payment.external_reference||'')));if(!order)throw new ShopError(404,'Pedido não encontrado.');if(order.paymentMethod!=='legacy')throw new ShopError(409,'Este pedido usa confirmação manual.');
  if(!validatePayment(payment,order,config.collectorId))throw new ShopError(409,'O pagamento não corresponde ao pedido, valor ou conta recebedora.');
  const refunded=cents(payment.transaction_amount_refunded??0);if(refunded===null||refunded>order.totalCents)throw new ShopError(409,'Reembolso divergente.');
  const record={id:paymentId,orderId:order.id,status:payment.status,amountCents:order.totalCents,refundedCents:refunded,providerUpdatedAt:new Date(payment.date_last_updated).toISOString()};

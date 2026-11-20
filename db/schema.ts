@@ -22,6 +22,7 @@ export const shopProducts=sqliteTable('shop_products',{
 export const shopOrders=sqliteTable('shop_orders',{
  id:text('id').primaryKey(),requestKey:text('request_key').notNull(),ownerHash:text('owner_hash').notNull(),buyer:text('buyer').notNull(),email:text('email').notNull(),phone:text('phone').notNull(),
  productId:text('product_id').notNull(),productName:text('product_name').notNull(),size:text('size').notNull(),quantity:integer('quantity').notNull(),unitCents:integer('unit_cents').notNull(),totalCents:integer('total_cents').notNull(),
+ paymentMethod:text('payment_method').notNull().default('legacy'),pixPayload:text('pix_payload'),receiverName:text('receiver_name'),deliveryInfo:text('delivery_info').notNull().default(''),confirmedAt:text('confirmed_at'),confirmedBy:text('confirmed_by'),paymentNote:text('payment_note'),
  status:text('status').notNull().default('creating'),fulfillment:text('fulfillment').notNull().default('Pendente'),mode:text('mode').notNull(),preferenceId:text('preference_id'),checkoutUrl:text('checkout_url'),
  consentAt:text('consent_at').notNull(),createdAt:text('created_at').notNull(),updatedAt:text('updated_at').notNull(),
 },t=>[uniqueIndex('shop_order_request_idx').on(t.requestKey),index('shop_order_created_idx').on(t.createdAt)]);
@@ -35,3 +36,5 @@ export const shopConfig=sqliteTable('shop_payment_config',{
 export const shopRateLimits=sqliteTable('shop_rate_limits',{
  id:text('id').primaryKey(),hits:integer('hits').notNull(),expiresAt:integer('expires_at').notNull(),
 });
+
+export const shopManualConfig=sqliteTable('shop_manual_config',{id:text('id').primaryKey(),pixKey:text('pix_key').notNull().default(''),receiverName:text('receiver_name').notNull().default(''),receiverCity:text('receiver_city').notNull().default(''),pixEnabled:integer('pix_enabled').notNull().default(0),cashEnabled:integer('cash_enabled').notNull().default(0),updatedAt:text('updated_at').notNull()});

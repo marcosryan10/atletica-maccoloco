@@ -20,4 +20,6 @@ jobs:
       - run: npm run test:auth
       - run: npm run test:password-auth
       - run: npm run test:payments
+      - run: npm run test:pix
+      - run: npm run test:pix-flow
       - run: npm run build

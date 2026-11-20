@@ -1,22 +1,24 @@
 import {getDb} from '../../../../db';
-import {shopProducts,shopOrders,shopConfig,shopPayments} from '../../../../db/schema';
+import {shopProducts,shopOrders,shopManualConfig} from '../../../../db/schema';
 import {and,eq,desc,sql,like,or} from 'drizzle-orm';
-import {adminOnly,json,shopError,ShopError,readJSON,encryptCredentials,mpFetch,synchronizePayment,limitShop} from '../../../../lib/shop-server';
+import {adminOnly,json,shopError,ShopError,readJSON,manualConfig,limitShop} from '../../../../lib/shop-server';
 import {productView} from '../../../../lib/shop';
 import {cents} from '../../../../lib/payment-core';
 import {productTemplates} from '../../../../lib/shop-templates';
+import {validPixKey,pixText,canConfirmManual} from '../../../../lib/pix';
+import {getChatGPTUser} from '../../../chatgpt-auth';
 import {env} from 'cloudflare:workers';
 export const dynamic='force-dynamic';
 export async function GET(request:Request){try{
  await adminOnly();const url=new URL(request.url),db=getDb(),mode=url.searchParams.get('mode')==='test'?'test':'live',page=Math.max(0,Math.min(100000,Number(url.searchParams.get('page'))||0)),search=(url.searchParams.get('search')||'').slice(0,100);
  const filter=and(eq(shopOrders.mode,mode),search?or(like(shopOrders.buyer,'%'+search.replace(/[\\%_]/g,'')+'%'),like(shopOrders.email,'%'+search.replace(/[\\%_]/g,'')+'%'),like(shopOrders.productName,'%'+search.replace(/[\\%_]/g,'')+'%')):undefined);
  const [products,orders,counts,stats,ranking,config]=await Promise.all([
- db.select().from(shopProducts),db.select({id:shopOrders.id,buyer:shopOrders.buyer,email:shopOrders.email,phone:shopOrders.phone,productId:shopOrders.productId,productName:shopOrders.productName,size:shopOrders.size,quantity:shopOrders.quantity,totalCents:shopOrders.totalCents,status:shopOrders.status,fulfillment:shopOrders.fulfillment,createdAt:shopOrders.createdAt,mode:shopOrders.mode}).from(shopOrders).where(filter).orderBy(desc(shopOrders.createdAt)).limit(50).offset(Math.floor(page)*50),
+ db.select().from(shopProducts),db.select({id:shopOrders.id,buyer:shopOrders.buyer,email:shopOrders.email,phone:shopOrders.phone,productId:shopOrders.productId,productName:shopOrders.productName,size:shopOrders.size,quantity:shopOrders.quantity,totalCents:shopOrders.totalCents,status:shopOrders.status,fulfillment:shopOrders.fulfillment,createdAt:shopOrders.createdAt,mode:shopOrders.mode,paymentMethod:shopOrders.paymentMethod,confirmedAt:shopOrders.confirmedAt,confirmedBy:shopOrders.confirmedBy,paymentNote:shopOrders.paymentNote}).from(shopOrders).where(filter).orderBy(desc(shopOrders.createdAt)).limit(50).offset(Math.floor(page)*50),
  db.select({count:sql<number>`count(*)`}).from(shopOrders).where(filter),
  db.select({paidOrders:sql<number>`count(*)`,buyers:sql<number>`count(distinct ${shopOrders.email})`,units:sql<number>`coalesce(sum(${shopOrders.quantity}),0)`,grossCents:sql<number>`coalesce(sum(${shopOrders.totalCents}),0)`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))),
  db.select({name:shopOrders.productName,quantity:sql<number>`sum(${shopOrders.quantity})`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))).groupBy(shopOrders.productId,shopOrders.productName).orderBy(sql`sum(${shopOrders.quantity}) desc`).limit(10),
- db.select({mode:shopConfig.mode,collectorId:shopConfig.collectorId,receiverLabel:shopConfig.receiverLabel,testPaidAt:shopConfig.testPaidAt,webhookAt:shopConfig.webhookAt}).from(shopConfig).where(eq(shopConfig.id,'mercado-pago'))]);
- return json({products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config:config[0]||{mode:'disabled',receiverLabel:'',collectorId:'',testPaidAt:null,webhookAt:null}});
+ manualConfig()]);
+ return json({products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config});
  }catch(e){return shopError(e);}}
 export async function POST(request:Request){try{
  await adminOnly(request);const b=await readJSON(request,720000),db=getDb(),now=new Date().toISOString();
@@ -41,20 +43,21 @@ export async function POST(request:Request){try{
  if(!['Pendente','Em preparação','Pronto para retirada','Entregue'].includes(b.value)||typeof b.id!=='string')throw new ShopError(400,'Situação inválida.');
  const changed=await db.update(shopOrders).set({fulfillment:b.value,updatedAt:now}).where(and(eq(shopOrders.id,b.id),eq(shopOrders.status,'paid'))).returning({id:shopOrders.id});if(!changed.length)throw new ShopError(409,'Somente pedidos com pagamento confirmado podem ser preparados ou entregues.');return json({ok:true});
  }
- if(b.action==='reconcile'){
- await limitShop(request,'admin-reconcile',30);if(typeof b.paymentId!=='string'||typeof b.orderId!=='string')throw new ShopError(400,'Informe pedido e ID do pagamento.');
- // Verify association before synchronizing so a typed ID cannot silently update another order.
- const config=await import('../../../../lib/shop-server').then(m=>m.paymentConfig());if(!config)throw new ShopError(400,'Configure a conta antes de conciliar.');const payment=await mpFetch('/v1/payments/'+encodeURIComponent(b.paymentId),config.token);if(String(payment.external_reference)!==b.orderId)throw new ShopError(409,'Este pagamento pertence a outro pedido.');await synchronizePayment(b.paymentId);return json({ok:true});
+ if(b.action==='confirm-manual'){
+ await limitShop(request,'admin-confirm',30);
+ if(typeof b.id!=='string'||typeof b.note!=='string'||b.note.trim().length<3||b.note.length>160||b.confirmReceived!==true)throw new ShopError(400,'Confirme o recebimento e registre uma referência da conferência.');
+ const [order]=await db.select().from(shopOrders).where(eq(shopOrders.id,b.id));
+ if(!order||!canConfirmManual(order)||b.totalCents!==order.totalCents)throw new ShopError(409,'Pedido indisponível para confirmação. Atualize a lista.');
+ const user=await getChatGPTUser();if(!user)throw new ShopError(403,'Acesso não autorizado.');
+ const changed=await db.update(shopOrders).set({status:'paid',confirmedAt:now,confirmedBy:user.email,paymentNote:b.note.trim(),updatedAt:now}).where(and(eq(shopOrders.id,order.id),eq(shopOrders.status,'pending'),eq(shopOrders.paymentMethod,order.paymentMethod))).returning({id:shopOrders.id});
+ if(!changed.length)throw new ShopError(409,'Este pedido já foi atualizado.');return json({ok:true});
  }
- if(b.action==='pause'){await db.update(shopConfig).set({mode:'disabled',updatedAt:now}).where(eq(shopConfig.id,'mercado-pago'));return json({ok:true});}
- if(b.action==='configure-payment'){
- await limitShop(request,'admin-configure',10);const token=typeof b.token==='string'?b.token.trim():'',webhookSecret=typeof b.webhookSecret==='string'?b.webhookSecret.trim():'',receiverLabel=typeof b.receiverLabel==='string'?b.receiverLabel.trim():'';
- if(token.length<20||token.length>500||webhookSecret.length<16||webhookSecret.length>500||!receiverLabel||receiverLabel.length>120||!['test','live'].includes(b.mode)||b.confirmReceiver!==true)throw new ShopError(400,'Preencha as credenciais, o nome da conta e a confirmação do recebedor.');
- const [previous]=await db.select().from(shopConfig).where(eq(shopConfig.id,'mercado-pago'));if(b.mode==='live'&&(!previous?.testPaidAt||!previous?.webhookAt))throw new ShopError(409,'Antes de ativar vendas reais, conclua um pagamento de teste com notificação autenticada.');
- const account=await mpFetch('/users/me',token);if(!account.id)throw new ShopError(400,'Não foi possível validar a conta recebedora.');
- const isTest=token.startsWith('TEST-')||(Array.isArray(account.tags)&&account.tags.includes('test_user'));
- if((b.mode==='test'&&!isTest)||(b.mode==='live'&&isTest))throw new ShopError(400,'As credenciais não correspondem ao ambiente escolhido. Use uma conta de teste para testar e uma conta real para produção.');
- await db.insert(shopConfig).values({id:'mercado-pago',encryptedCredentials:await encryptCredentials({token,webhookSecret}),collectorId:String(account.id),receiverLabel,mode:b.mode,testPaidAt:previous?.testPaidAt||null,webhookAt:previous?.webhookAt||null,updatedAt:now}).onConflictDoUpdate({target:shopConfig.id,set:{encryptedCredentials:await encryptCredentials({token,webhookSecret}),collectorId:String(account.id),receiverLabel,mode:b.mode,updatedAt:now}});return json({ok:true});
+ if(b.action==='configure-manual'){
+ await limitShop(request,'admin-configure',10);
+ const pixKey=typeof b.pixKey==='string'?b.pixKey.trim():'',receiverName=typeof b.receiverName==='string'?b.receiverName.trim():'',receiverCity=typeof b.receiverCity==='string'?b.receiverCity.trim():'';
+ if(pixKey.length>77||receiverName.length>120||receiverCity.length>80||typeof b.pixEnabled!=='boolean'||typeof b.cashEnabled!=='boolean'||(pixKey&&!validPixKey(pixKey))||(b.pixEnabled&&(!validPixKey(pixKey)||!pixText(receiverName,25)||!pixText(receiverCity,15)||b.confirmReceiver!==true)))throw new ShopError(400,'Confira a chave Pix, titular, cidade e a autorização do recebedor.');
+ const row={id:'manual',pixKey,receiverName,receiverCity,pixEnabled:b.pixEnabled?1:0,cashEnabled:b.cashEnabled?1:0,updatedAt:now};
+ await db.insert(shopManualConfig).values(row).onConflictDoUpdate({target:shopManualConfig.id,set:row});return json({ok:true});
  }
  throw new ShopError(400,'Ação inválida.');
  }catch(e){return shopError(e);}}

@@ -1,3 +1,7 @@
+# Integração anterior
+
+A loja atual usa Pix direto no BB e dinheiro, com confirmação manual. Consulte [CONFIGURAR_PIX.md](CONFIGURAR_PIX.md). As instruções abaixo descrevem a integração anterior e não devem ser usadas para ativar novas vendas.
+
 > Para esta versão na Cloudflare, configure primeiro o domínio, o Access e o segredo de runtime conforme HOSPEDAR_NA_CLOUDFLARE.md. Substitua SEU-DOMINIO pelo endereço do Worker.
 
 # Ativação da loja MaccoLoco
