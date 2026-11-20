@@ -1,8 +1,8 @@
 import {getDb} from '../../../../db';
-import {shopProducts,shopOrders,shopManualConfig} from '../../../../db/schema';
+import {shopProducts,shopOrders,shopManualConfig,shopCategories} from '../../../../db/schema';
 import {and,eq,desc,sql,like,or} from 'drizzle-orm';
 import {adminOnly,json,shopError,ShopError,readJSON,manualConfig,limitShop} from '../../../../lib/shop-server';
-import {productView} from '../../../../lib/shop';
+import {productView,categories,categoryId,categoryNames} from '../../../../lib/shop';
 import {cents} from '../../../../lib/payment-core';
 import {productTemplates} from '../../../../lib/shop-templates';
 import {validPixKey,pixText,canConfirmManual} from '../../../../lib/pix';
@@ -12,16 +12,21 @@ export const dynamic='force-dynamic';
 export async function GET(request:Request){try{
  await adminOnly();const url=new URL(request.url),db=getDb(),mode=url.searchParams.get('mode')==='test'?'test':'live',page=Math.max(0,Math.min(100000,Number(url.searchParams.get('page'))||0)),search=(url.searchParams.get('search')||'').slice(0,100);
  const filter=and(eq(shopOrders.mode,mode),search?or(like(shopOrders.buyer,'%'+search.replace(/[\\%_]/g,'')+'%'),like(shopOrders.email,'%'+search.replace(/[\\%_]/g,'')+'%'),like(shopOrders.productName,'%'+search.replace(/[\\%_]/g,'')+'%')):undefined);
- const [products,orders,counts,stats,ranking,config]=await Promise.all([
+ const [products,orders,counts,stats,ranking,config,savedCategories]=await Promise.all([
  db.select().from(shopProducts),db.select({id:shopOrders.id,buyer:shopOrders.buyer,email:shopOrders.email,phone:shopOrders.phone,productId:shopOrders.productId,productName:shopOrders.productName,size:shopOrders.size,quantity:shopOrders.quantity,totalCents:shopOrders.totalCents,status:shopOrders.status,fulfillment:shopOrders.fulfillment,createdAt:shopOrders.createdAt,mode:shopOrders.mode,paymentMethod:shopOrders.paymentMethod,confirmedAt:shopOrders.confirmedAt,confirmedBy:shopOrders.confirmedBy,paymentNote:shopOrders.paymentNote}).from(shopOrders).where(filter).orderBy(desc(shopOrders.createdAt)).limit(50).offset(Math.floor(page)*50),
  db.select({count:sql<number>`count(*)`}).from(shopOrders).where(filter),
  db.select({paidOrders:sql<number>`count(*)`,buyers:sql<number>`count(distinct ${shopOrders.email})`,units:sql<number>`coalesce(sum(${shopOrders.quantity}),0)`,grossCents:sql<number>`coalesce(sum(${shopOrders.totalCents}),0)`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))),
  db.select({name:shopOrders.productName,quantity:sql<number>`sum(${shopOrders.quantity})`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))).groupBy(shopOrders.productId,shopOrders.productName).orderBy(sql`sum(${shopOrders.quantity}) desc`).limit(10),
- manualConfig()]);
- return json({products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config});
+ manualConfig(),db.select().from(shopCategories)]);
+ return json({products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config,categories:categoryNames([...categories,...savedCategories.map(c=>c.name),...products.map(p=>p.category)])});
  }catch(e){return shopError(e);}}
 export async function POST(request:Request){try{
  await adminOnly(request);const b=await readJSON(request,720000),db=getDb(),now=new Date().toISOString();
+ if(b.action==='category'){
+ const name=typeof b.name==='string'?b.name.replace(/\s+/g,' ').trim():'';if(name.length<2||name.length>40||/[\u0000-\u001f\u007f]/.test(name))throw new ShopError(400,'Use um nome de categoria com 2 a 40 caracteres.');
+ const id=categoryId(name),builtin=categories.find(c=>categoryId(c)===id);if(builtin)return json({ok:true,name:builtin});
+ await db.insert(shopCategories).values({id,name,createdAt:now}).onConflictDoNothing({target:shopCategories.id});const [saved]=await db.select().from(shopCategories).where(eq(shopCategories.id,id));return json({ok:true,name:saved.name});
+ }
  if(b.action==='seed'){
  for(const p of productTemplates)await db.insert(shopProducts).values({id:p.id,name:p.name,category:p.category,description:p.description,priceCents:null,image:'',sizes:JSON.stringify(p.sizes),active:1,illustration:p.illustration,deliveryInfo:'',updatedAt:now}).onConflictDoNothing();return json({ok:true});
  }

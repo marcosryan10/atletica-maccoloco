@@ -6,7 +6,7 @@ import {join,resolve,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 const sqlite=new DatabaseSync(':memory:');
-for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
+for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql','0005_puzzling_dakota_north.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
 function prepared(sql,params=[]){return {bind(...p){return prepared(sql,p);},async all(){return {results:sqlite.prepare(sql).all(...params),success:true,meta:{}};},async first(){return sqlite.prepare(sql).get(...params)||null;},async raw(){const stmt=sqlite.prepare(sql);stmt.setReturnArrays(true);return stmt.all(...params);},async run(){const r=sqlite.prepare(sql).run(...params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)},results:[]};}};}
 globalThis.__manualShopTest={env:{DB:{prepare:prepared}},user:null};
 const dir=await mkdtemp(join(tmpdir(),'macco-pix-test-'));
@@ -23,7 +23,14 @@ try{
  const get=(path,cookie='')=>new Request(origin+path,{headers:{cookie}});
  let r=await api.shop.GET();assert.equal((await r.json()).payment.checkoutEnabled,false);
  r=await api.admin.POST(post({action:'configure-manual',pixEnabled:false,cashEnabled:true}));assert.equal(r.status,403);
+ assert.equal((await api.admin.POST(post({action:'category',name:'Canecas'}))).status,403);
  globalThis.__manualShopTest.user={email:'associacaoatleticamaccoloco@gmail.com',userId:'test-admin'};
+ assert.equal((await api.admin.POST(post({action:'category',name:'X'}))).status,400);
+ let categoryResponse=await api.admin.POST(post({action:'category',name:'  Canecas   especiais  '}));assert.equal(categoryResponse.status,200);assert.equal((await categoryResponse.json()).name,'Canecas especiais');
+ categoryResponse=await api.admin.POST(post({action:'category',name:'canecas especiais'}));assert.equal((await categoryResponse.json()).name,'Canecas especiais');
+ assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM shop_categories').get().n,1);
+ categoryResponse=await api.admin.POST(post({action:'category',name:'cópos'}));assert.equal((await categoryResponse.json()).name,'Copos');assert.equal(sqlite.prepare('SELECT COUNT(*) AS n FROM shop_categories').get().n,1);
+ const categoryList=(await (await api.admin.GET(get('/api/admin/shop'))).json()).categories;assert.ok(categoryList.includes('Canecas especiais'));assert.ok(categoryList.includes('Copos'));
  const configuration={action:'configure-manual',pixEnabled:true,cashEnabled:true,pixKey:'123e4567-e12b-12d1-a456-426655440000',receiverName:'RECEBEDOR TESTE',receiverCity:'ALMENARA',confirmReceiver:true};
  assert.equal((await api.admin.POST(post(configuration))).status,200);
  const product={id:'test-product',name:'Produto teste',category:'Roupas',description:'Teste local',deliveryInfo:'Retirada combinada com a direção',sizes:['M'],price:45.9,image:'',active:true,illustration:'other'};

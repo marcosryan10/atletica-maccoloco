@@ -39,3 +39,5 @@ export const shopRateLimits=sqliteTable('shop_rate_limits',{
 });
 
 export const shopManualConfig=sqliteTable('shop_manual_config',{id:text('id').primaryKey(),pixKey:text('pix_key').notNull().default(''),receiverName:text('receiver_name').notNull().default(''),receiverCity:text('receiver_city').notNull().default(''),pixEnabled:integer('pix_enabled').notNull().default(0),cashEnabled:integer('cash_enabled').notNull().default(0),updatedAt:text('updated_at').notNull()});
+
+export const shopCategories=sqliteTable('shop_categories',{id:text('id').primaryKey(),name:text('name').notNull(),createdAt:text('created_at').notNull()});
