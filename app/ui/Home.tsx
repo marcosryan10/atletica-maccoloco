@@ -5,6 +5,7 @@ import { courses,sports,initialNews,Publication } from '../../lib/maccoloco';
 function Instagram({size=24}:{size?:number}){return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".8" fill="currentColor" stroke="none"/></svg>}
 import HeroVideo from './HeroVideo';
 import SiteHeader from './SiteHeader';
+import SiteFooter from './SiteFooter';
 type Partner={id:string;name:string;description:string;image:string;url:string};
 const insta='https://www.instagram.com/atletica.maccoloco/';
 const date=(v:string)=>new Date(v.length===10?v+'T12:00:00':v).toLocaleDateString('pt-BR',{day:'2-digit',month:'short',year:'numeric'});
@@ -44,7 +45,7 @@ export default function Home(){
  <section className="partners-showcase section" id="parcerias"><div className="wrap"><div className="section-head"><h2>NOSSOS<br/>PARCEIROS.</h2><a className="button outline" href="/media/parcerias-maccoloco.pdf" target="_blank" rel="noreferrer"><Download size={18}/>Portfólio Atlética</a></div><div className="partner-grid">{partners.length?partners.map(partner=><article className="partner-card" key={partner.id}><div className="partner-logo"><img src={partner.image} alt={'Logo de '+partner.name} loading="lazy"/></div><h3>{partner.name}</h3><p>{partner.description}</p>{partner.url&&<a className="text-link" href={partner.url} target="_blank" rel="noreferrer">Conhecer {partner.name}</a>}</article>):Array.from({length:3},(_,i)=><div className="partner-reserved" key={i} aria-label="Espaço reservado para futura parceria"><Plus aria-hidden="true"/></div>)}</div></div></section>
  <section className="faq-section section"><div className="wrap faq-grid"><div><span className="eyebrow">Antes de entrar em quadra</span><h2>DÚVIDAS<br/>DA GALERA.</h2></div><div>{faqs.map(([q,a],i)=><div className="faq-item" key={q}><button onClick={()=>setFaq(faq===i?null:i)} aria-expanded={faq===i} aria-controls={'faq-'+i}>{q}{faq===i?<X size={21}/>:<Plus size={21}/>}</button><div id={'faq-'+i} hidden={faq!==i}><p>{a}</p></div></div>)}</div></div></section>
  </main>
- <footer className="footer"><div className="wrap"><div className="footer-top"><a href={insta} target="_blank" rel="noreferrer"><Instagram size={20}/>@atletica.maccoloco</a></div><div className="footer-word" aria-hidden="true">MACCOLOCO</div><div className="footer-bottom"><div><a href="/privacidade">Privacidade</a><a href="mailto:associacaoatleticamaccoloco@gmail.com" aria-label="Enviar e-mail à MaccoLoco"><Mail size={20}/></a></div></div></div></footer>
+ <SiteFooter/>
  {post&&<Modal post={post} close={()=>setPost(null)}/>}
  </>;
 }
