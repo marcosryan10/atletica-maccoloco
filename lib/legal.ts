@@ -70,7 +70,7 @@ export const policies: Policy[] = [
     summary: 'Este site reúne informações da Atlética, inscrições e a loja. Leia a oferta de cada produto e confira seus dados antes de enviar um pedido.',
     sections: [
       {id: 'identificacao', title: 'Quem oferece o site e os produtos', paragraphs: [
-        'A Associação Atlética Unificada MaccoLoco é uma organização estudantil independente, sem CNPJ neste momento. Marcos Ryan Oliveira Porto responde pela operação deste site e pelas vendas apresentadas pela MaccoLoco. O endereço e o e-mail de atendimento estão publicados ao final desta página e no rodapé.',
+        'A Associação Atlética Unificada MaccoLoco é uma organização estudantil independente, sem CNPJ neste momento. Marcos Ryan Oliveira Porto responde pela operação deste site e pelas vendas apresentadas pela MaccoLoco. O endereço e o e-mail de atendimento estão publicados ao final desta página.',
         'O site não é uma loja do IFNMG. A instituição de ensino não é indicada como fornecedora, garantidora de compras ou responsável financeira da organização. A ausência de CNPJ não afasta obrigações de identificação, documentação, tributação ou proteção ao consumidor que sejam aplicáveis à operação.'
       ]},
       {id: 'uso', title: 'Uso do conteúdo e das funções', paragraphs: [
