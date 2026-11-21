@@ -15,7 +15,9 @@ A ideia é concentrar em um só lugar as informações que antes ficavam espalha
 - Pedidos com pagamento por Pix ou dinheiro.
 - QR Code Pix e código Copia e Cola com o valor do pedido.
 - Confirmação manual de recebimentos, acompanhamento da preparação e indicadores de vendas.
-- Painel administrativo com login restrito à direção autorizada.
+- Painel administrativo com contas individuais e permissões por integrante.
+- Conta principal da associação para liberar e revogar acessos da direção.
+- Área do cliente com pedidos próprios e notificações internas de atualização.
 
 No Pix, o comprador faz a transferência pelo aplicativo do banco. O pedido continua pendente até a direção conferir o recebimento e confirmar no painel. O sistema registra quem fez a confirmação, a data e uma referência da conferência.
 
@@ -30,7 +32,7 @@ No Pix, o comprador faz a transferência pelo aplicativo do banco. O pedido cont
 | Cloudflare Workers | Execução do site e das funções do servidor. |
 | Cloudflare D1 | Banco de dados SQLite para inscrições, publicações, parceiros, produtos, categorias e pedidos. |
 | Drizzle ORM e Drizzle Kit | Consultas ao banco, definição das tabelas e migrações. |
-| Supabase Auth | Autenticação por e-mail e senha da direção. |
+| Supabase Auth | Autenticação por e-mail e senha da direção e dos clientes. |
 | GitHub e GitHub Actions | Versionamento do código e verificações automáticas. |
 | Wrangler | Publicação e gerenciamento dos recursos da Cloudflare. |
 
@@ -46,6 +48,7 @@ app/
   login/        Páginas de acesso
   produtos/     Página da loja
   pedido/       Acompanhamento do pedido
+  minha-conta/  Login e área pessoal do cliente
 db/             Conexão e estrutura do banco
 drizzle/        Migrações do banco de dados
 lib/            Validações e funções compartilhadas
@@ -63,7 +66,7 @@ O código fica neste repositório. Quando uma atualização chega à branch `mai
 
 O GitHub Actions executa a checagem de tipos, os testes e o build. Os testes cobrem autenticação, pedidos, Pix, categorias e imagens das publicações.
 
-Os dados da atlética ficam no D1. O Supabase Auth é usado para o login da direção, e as operações administrativas passam pela validação de acesso no servidor.
+Os dados da atlética ficam no D1. O Supabase Auth é usado para o login da direção e dos clientes, e as operações administrativas passam pela validação de acesso no servidor.
 
 ## Responsável pelo projeto
 
@@ -72,3 +75,5 @@ Os dados da atlética ficam no D1. O Supabase Auth é usado para o login da dire
 [GitHub](https://github.com/marcosryan10) · [LinkedIn](https://www.linkedin.com/in/marcosryanl)
 
 As licenças e os avisos de autoria das bibliotecas e dos arquivos de terceiros permanecem nos respectivos arquivos.
+
+Contas de clientes não concedem acesso administrativo. A autorização da direção é consultada no servidor em cada operação. Pedidos de uma conta são consultados pelo identificador autenticado; o e-mail informado em um formulário não libera o histórico de compras. As notificações aparecem dentro da área pessoal, sem envio de push ou WhatsApp.

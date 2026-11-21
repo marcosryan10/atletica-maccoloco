@@ -1,0 +1,1 @@
+CREATE INDEX `shop_order_customer_idx` ON `shop_orders` (`customer_user_id`,`created_at`);

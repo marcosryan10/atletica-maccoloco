@@ -2,22 +2,23 @@ import { getMaccolocoUser } from '../../maccoloco-auth';
 import { adminEmail,initialNews } from '../../../lib/maccoloco';
 import { getDb } from '../../../db';
 import { applications,publications,partners } from '../../../db/schema';
-import { desc,eq } from 'drizzle-orm';
-import { isMaccoAdmin } from '../../../lib/admin-auth';
+import { desc,eq,inArray } from 'drizzle-orm';
+import {contentPermission,hasPermission} from '../../../lib/access-core';
 import {publicationImage} from '../../../lib/publication-image';
 import {readJSON,shopError} from '../../../lib/shop-server';
 export const dynamic='force-dynamic';
 const deny=()=>Response.json({error:'Acesso exclusivo da direção autorizada.'},{status:403});
-async function authorized(){const user=await getMaccolocoUser();return user?isMaccoAdmin(user.email):false;}
+async function authorized(){return getMaccolocoUser();}
 export async function GET(){
- if(!await authorized())return deny();
- try{const db=getDb();const [entries,posts,companies]=await Promise.all([db.select().from(applications).orderBy(desc(applications.createdAt)),db.select().from(publications),db.select().from(partners)]);const merged=new Map(initialNews.map(n=>[n.id,n]));for(const row of posts)merged.set(row.id,row as any);return Response.json({applications:entries,publications:[...merged.values()],partners:companies},{headers:{'Cache-Control':'private, no-store'}});}catch{return Response.json({error:'Não foi possível carregar os dados.'},{status:503});}
+ const actor=await authorized();if(!actor)return deny();
+ try{const db=getDb(),kinds=[...(hasPermission(actor,'news')?['news']:[]),...(hasPermission(actor,'events')?['event']:[])];const [entries,posts,companies]=await Promise.all([hasPermission(actor,'applications')?db.select().from(applications).orderBy(desc(applications.createdAt)):Promise.resolve([]),kinds.length?db.select().from(publications).where(inArray(publications.kind,kinds)):Promise.resolve([]),hasPermission(actor,'partners')?db.select().from(partners):Promise.resolve([])]);const merged=new Map(initialNews.filter(n=>kinds.includes(n.kind)).map(n=>[n.id,n]));for(const row of posts)merged.set(row.id,row as any);return Response.json({applications:entries,publications:[...merged.values()],partners:companies,permissions:actor.permissions,owner:actor.owner},{headers:{'Cache-Control':'private, no-store'}});}catch{return Response.json({error:'Não foi possível carregar os dados.'},{status:503});}
 }
 export async function POST(request:Request){
  if(request.headers.get('origin')!==new URL(request.url).origin)return deny();
- if(!await authorized())return deny();
+ const actor=await authorized();if(!actor)return deny();
  if(Number(request.headers.get('content-length')||0)>800000)return Response.json({error:'Conteúdo muito extenso.'},{status:413});
- try{const raw=await readJSON(request,800000);if(!raw||typeof raw!=='object'||Array.isArray(raw))return Response.json({error:'Dados inválidos.'},{status:400});const b=raw as Record<string,any>;const db=getDb();
+ try{const raw=await readJSON(request,800000);if(!raw||typeof raw!=='object'||Array.isArray(raw))return Response.json({error:'Dados inválidos.'},{status:400});const b=raw as Record<string,any>;const db=getDb();const permission=contentPermission(b.action,b.kind);if(!permission||!hasPermission(actor,permission))return deny();
+ if(b.action==='publication'&&typeof b.id==='string'){const [existing]=await db.select({kind:publications.kind}).from(publications).where(eq(publications.id,b.id));const previous=existing?.kind||initialNews.find(p=>p.id===b.id)?.kind;if(previous&&!hasPermission(actor,previous==='event'?'events':'news'))return deny();}
  if(b.action==='partner'){
  const text=(v:unknown,n:number)=>typeof v==='string'?v.trim().slice(0,n):'';
  const name=text(b.name,100),description=text(b.description,800),image=text(b.image,700001),url=text(b.url,300);

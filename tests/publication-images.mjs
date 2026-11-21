@@ -6,9 +6,9 @@ import {join,resolve,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 const sqlite=new DatabaseSync(':memory:');
-for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql','0005_puzzling_dakota_north.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
+for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql','0005_puzzling_dakota_north.sql','0006_direction_and_customer_accounts.sql','0007_customer_order_index.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
 function prepared(sql,params=[]){return {bind(...p){return prepared(sql,p);},async all(){return {results:sqlite.prepare(sql).all(...params),success:true,meta:{}};},async first(){return sqlite.prepare(sql).get(...params)||null;},async raw(){const stmt=sqlite.prepare(sql);stmt.setReturnArrays(true);return stmt.all(...params);},async run(){const r=sqlite.prepare(sql).run(...params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)},results:[]};}};}
-globalThis.__manualShopTest={env:{DB:{prepare:prepared}},user:null};
+globalThis.__manualShopTest={env:{DB:{prepare:prepared,async batch(statements){sqlite.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.all());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}}}},user:null};
 const dir=await mkdtemp(join(tmpdir(),'macco-pix-test-'));
 try{
  const routes={editor:'app/api/admin/route.ts',publications:'app/api/publications/route.ts'};
@@ -23,7 +23,7 @@ try{
  const image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aP5sAAAAASUVORK5CYII=';
  const body={action:'publication',kind:'news',title:'Notícia de teste',summary:'Resumo da publicação de teste.',body:'Texto completo da publicação de teste.',date:'2026-11-20',category:'Novidades',image,imageAlt:'Arte de teste',published:0};
  assert.equal((await api.editor.POST(post(body))).status,403);
- globalThis.__manualShopTest.user={email:'associacaoatleticamaccoloco@gmail.com',userId:'test-admin'};
+ globalThis.__manualShopTest.user={email:'associacaoatleticamaccoloco@gmail.com',userId:'test-admin',owner:true,permissions:['applications','news','events','partners','products','orders','payments']};
  assert.equal((await api.editor.POST(post({...body,image:'data:image/svg+xml;base64,PHN2Zz48L3N2Zz4='}))).status,400);
  assert.equal((await api.editor.POST(post({...body,image:'data:image/png;base64,'+Buffer.from('imagem falsa').toString('base64')}))).status,400);
  assert.equal((await api.editor.POST(post({...body,image:'data:image/png;base64,'+Buffer.alloc(201*1024).toString('base64')}))).status,400);

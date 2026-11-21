@@ -8,20 +8,22 @@ import {productTemplates} from '../../../../lib/shop-templates';
 import {validPixKey,pixText,canConfirmManual} from '../../../../lib/pix';
 import {getMaccolocoUser} from '../../../maccoloco-auth';
 import {env} from 'cloudflare:workers';
+import {hasPermission,shopPermission} from '../../../../lib/access-core';
+import {orderNotification} from '../../../../lib/customer-notifications';
 export const dynamic='force-dynamic';
 export async function GET(request:Request){try{
- await adminOnly();const url=new URL(request.url),db=getDb(),mode=url.searchParams.get('mode')==='test'?'test':'live',page=Math.max(0,Math.min(100000,Number(url.searchParams.get('page'))||0)),search=(url.searchParams.get('search')||'').slice(0,100);
+ const actor=await adminOnly(),seeOrders=hasPermission(actor,'orders')||hasPermission(actor,'payments'),seeProducts=hasPermission(actor,'products');const url=new URL(request.url),db=getDb(),mode=url.searchParams.get('mode')==='test'?'test':'live',page=Math.max(0,Math.min(100000,Number(url.searchParams.get('page'))||0)),search=(url.searchParams.get('search')||'').slice(0,100);
  const filter=and(eq(shopOrders.mode,mode),search?or(like(shopOrders.buyer,'%'+search.replace(/[\\%_]/g,'')+'%'),like(shopOrders.email,'%'+search.replace(/[\\%_]/g,'')+'%'),like(shopOrders.productName,'%'+search.replace(/[\\%_]/g,'')+'%')):undefined);
  const [products,orders,counts,stats,ranking,config,savedCategories]=await Promise.all([
- db.select().from(shopProducts),db.select({id:shopOrders.id,buyer:shopOrders.buyer,email:shopOrders.email,phone:shopOrders.phone,productId:shopOrders.productId,productName:shopOrders.productName,size:shopOrders.size,quantity:shopOrders.quantity,totalCents:shopOrders.totalCents,status:shopOrders.status,fulfillment:shopOrders.fulfillment,createdAt:shopOrders.createdAt,mode:shopOrders.mode,paymentMethod:shopOrders.paymentMethod,confirmedAt:shopOrders.confirmedAt,confirmedBy:shopOrders.confirmedBy,paymentNote:shopOrders.paymentNote}).from(shopOrders).where(filter).orderBy(desc(shopOrders.createdAt)).limit(50).offset(Math.floor(page)*50),
- db.select({count:sql<number>`count(*)`}).from(shopOrders).where(filter),
- db.select({paidOrders:sql<number>`count(*)`,buyers:sql<number>`count(distinct ${shopOrders.email})`,units:sql<number>`coalesce(sum(${shopOrders.quantity}),0)`,grossCents:sql<number>`coalesce(sum(${shopOrders.totalCents}),0)`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))),
- db.select({name:shopOrders.productName,quantity:sql<number>`sum(${shopOrders.quantity})`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))).groupBy(shopOrders.productId,shopOrders.productName).orderBy(sql`sum(${shopOrders.quantity}) desc`).limit(10),
- manualConfig(),db.select().from(shopCategories)]);
- return json({products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config,categories:categoryNames([...categories,...savedCategories.map(c=>c.name),...products.map(p=>p.category)])});
+ seeProducts?db.select().from(shopProducts):Promise.resolve([]),seeOrders?db.select({id:shopOrders.id,buyer:shopOrders.buyer,email:shopOrders.email,phone:shopOrders.phone,productId:shopOrders.productId,productName:shopOrders.productName,size:shopOrders.size,quantity:shopOrders.quantity,totalCents:shopOrders.totalCents,status:shopOrders.status,fulfillment:shopOrders.fulfillment,createdAt:shopOrders.createdAt,mode:shopOrders.mode,paymentMethod:shopOrders.paymentMethod,confirmedAt:shopOrders.confirmedAt,confirmedBy:shopOrders.confirmedBy,paymentNote:shopOrders.paymentNote}).from(shopOrders).where(filter).orderBy(desc(shopOrders.createdAt)).limit(50).offset(Math.floor(page)*50):Promise.resolve([]),
+ seeOrders?db.select({count:sql<number>`count(*)`}).from(shopOrders).where(filter):Promise.resolve([{count:0}]),
+ seeOrders?db.select({paidOrders:sql<number>`count(*)`,buyers:sql<number>`count(distinct ${shopOrders.email})`,units:sql<number>`coalesce(sum(${shopOrders.quantity}),0)`,grossCents:sql<number>`coalesce(sum(${shopOrders.totalCents}),0)`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))):Promise.resolve([{paidOrders:0,buyers:0,units:0,grossCents:0}]),
+ seeOrders?db.select({name:shopOrders.productName,quantity:sql<number>`sum(${shopOrders.quantity})`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))).groupBy(shopOrders.productId,shopOrders.productName).orderBy(sql`sum(${shopOrders.quantity}) desc`).limit(10):Promise.resolve([]),
+ hasPermission(actor,'payments')?manualConfig():Promise.resolve({pixEnabled:0,cashEnabled:0}),seeProducts?db.select().from(shopCategories):Promise.resolve([])]);
+ return json({products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config,permissions:actor.permissions,categories:seeProducts?categoryNames([...categories,...savedCategories.map(c=>c.name),...products.map(p=>p.category)]):[]});
  }catch(e){return shopError(e);}}
 export async function POST(request:Request){try{
- await adminOnly(request);const b=await readJSON(request,720000),db=getDb(),now=new Date().toISOString();
+ const b=await readJSON(request,720000),permission=shopPermission(b.action);if(!permission)throw new ShopError(400,'Ação inválida.');await adminOnly(request,permission);const db=getDb(),now=new Date().toISOString();
  if(b.action==='category'){
  const name=typeof b.name==='string'?b.name.replace(/\s+/g,' ').trim():'';if(name.length<2||name.length>40||/[\u0000-\u001f\u007f]/.test(name))throw new ShopError(400,'Use um nome de categoria com 2 a 40 caracteres.');
  const id=categoryId(name),builtin=categories.find(c=>categoryId(c)===id);if(builtin)return json({ok:true,name:builtin});
@@ -46,7 +48,7 @@ export async function POST(request:Request){try{
  if(b.action==='delete-product'){if(typeof b.id!=='string')throw new ShopError(400,'Produto inválido.');await db.delete(shopProducts).where(eq(shopProducts.id,b.id));return json({ok:true});}
  if(b.action==='fulfillment'){
  if(!['Pendente','Em preparação','Pronto para retirada','Entregue'].includes(b.value)||typeof b.id!=='string')throw new ShopError(400,'Situação inválida.');
- const changed=await db.update(shopOrders).set({fulfillment:b.value,updatedAt:now}).where(and(eq(shopOrders.id,b.id),eq(shopOrders.status,'paid'))).returning({id:shopOrders.id});if(!changed.length)throw new ShopError(409,'Somente pedidos com pagamento confirmado podem ser preparados ou entregues.');return json({ok:true});
+ const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET fulfillment=?,updated_at=? WHERE id=? AND status=? RETURNING id').bind(b.value,now,b.id,'paid'),env.DB!.prepare('INSERT OR IGNORE INTO customer_notifications(id,user_id,order_id,event_key,title,body,created_at) SELECT ?,customer_user_id,id,?,?,?,? FROM shop_orders WHERE id=? AND customer_user_id IS NOT NULL AND status=? AND fulfillment=? AND updated_at=?').bind(crypto.randomUUID(),b.id+':fulfillment:'+b.value,'Atualização do seu pedido',b.value==='Pronto para retirada'?'Seu pedido está pronto para retirada. Confira as orientações de entrega.':b.value==='Entregue'?'A direção registrou a entrega do seu pedido.':'Preparação do pedido: '+b.value,now,b.id,'paid',b.value,now)]);if(!results[0].results.length)throw new ShopError(409,'Somente pedidos com pagamento confirmado podem ser preparados ou entregues.');return json({ok:true});
  }
  if(b.action==='confirm-manual'){
  await limitShop(request,'admin-confirm',30);
@@ -54,8 +56,8 @@ export async function POST(request:Request){try{
  const [order]=await db.select().from(shopOrders).where(eq(shopOrders.id,b.id));
  if(!order||!canConfirmManual(order)||b.totalCents!==order.totalCents)throw new ShopError(409,'Pedido indisponível para confirmação. Atualize a lista.');
  const user=await getMaccolocoUser();if(!user)throw new ShopError(403,'Acesso não autorizado.');
- const changed=await db.update(shopOrders).set({status:'paid',confirmedAt:now,confirmedBy:user.email,paymentNote:b.note.trim(),updatedAt:now}).where(and(eq(shopOrders.id,order.id),eq(shopOrders.status,'pending'),eq(shopOrders.paymentMethod,order.paymentMethod))).returning({id:shopOrders.id});
- if(!changed.length)throw new ShopError(409,'Este pedido já foi atualizado.');return json({ok:true});
+ const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET status=?,confirmed_at=?,confirmed_by=?,payment_note=?,updated_at=? WHERE id=? AND status=? AND payment_method=? RETURNING id').bind('paid',now,user.email,b.note.trim(),now,order.id,'pending',order.paymentMethod),orderNotification(order.id,'paid','Pagamento confirmado','A direção confirmou o recebimento. Acompanhe as próximas informações sobre seu pedido.',now)]);
+ if(!results[0].results.length)throw new ShopError(409,'Este pedido já foi atualizado.');return json({ok:true});
  }
  if(b.action==='configure-manual'){
  await limitShop(request,'admin-configure',10);

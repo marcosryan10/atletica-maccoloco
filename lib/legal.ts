@@ -24,6 +24,7 @@ export const policies: Policy[] = [
         ['Interesse esportivo', 'Nome, e-mail, WhatsApp, curso, período, modalidades, experiência e disponibilidade opcional.', 'Organizar grupos e entrar em contato sobre participação esportiva.'],
         ['Compras', 'Nome, e-mail, WhatsApp, produto, tamanho, quantidade, valores, referência, datas, retirada e situação do pedido.', 'Preparar o pedido, conferir o recebimento, combinar retirada e prestar atendimento.'],
         ['Pagamento Pix', 'Código Pix, nome do recebedor, valor, referência do pedido e registro da confirmação pela direção.', 'Apresentar a instrução de pagamento e conciliar o pedido com o valor recebido.'],
+        ['Área do cliente', 'E-mail confirmado, identificador da conta, pedidos vinculados e notificações internas com situação de leitura.', 'Permitir consulta privada de pedidos e suas atualizações.'],
         ['Área da direção', 'E-mail autorizado, informações de autenticação, sessão e registros das operações administrativas.', 'Validar o acesso e permitir a gestão do sistema.'],
         ['Funcionamento e proteção', 'Dados técnicos da conexão, endereço IP tratado pela infraestrutura, registros de erro e identificadores temporários de controle de tentativas.', 'Entregar páginas, identificar falhas e limitar abuso.']
       ]}, paragraphs: [
@@ -36,7 +37,7 @@ export const policies: Policy[] = [
         'Segurança e prevenção de abuso: proteção da operação e interesse legítimo, quando cabível, com uso limitado ao necessário.'
       ], paragraphs: ['O envio do cadastro não garante vaga esportiva nem formaliza associação. Não usamos esses dados para vender listas de contatos, selecionar públicos de anúncios ou enviar ofertas de parceiros. Publicação de imagem ou uso para outra finalidade exige avaliação e informação próprias.']},
       {id: 'compartilhamento', title: 'Acesso, prestadores e serviços externos', paragraphs: [
-        'As inscrições e os pedidos ficam no banco Cloudflare D1 e são consultados pela direção autorizada. A Cloudflare também executa o site e trata informações técnicas da conexão. O Supabase Auth presta o serviço de autenticação da direção. A senha é encaminhada ao serviço de autenticação; não é armazenada na tabela de pedidos ou de atletas.',
+        'As inscrições e os pedidos ficam no banco Cloudflare D1 e são consultados pela direção autorizada. A Cloudflare também executa o site e trata informações técnicas da conexão. O Supabase Auth presta o serviço de autenticação de integrantes da direção e clientes. O acesso administrativo é limitado pelas permissões registradas no servidor, e alterações dessas permissões têm registro de auditoria. O Gmail da associação é utilizado como serviço SMTP para envio dos links de confirmação e recuperação de acesso; esse envio envolve o endereço do destinatário e o conteúdo da mensagem de autenticação. A senha é encaminhada ao serviço de autenticação; não é armazenada na tabela de pedidos ou de atletas.',
         'O site carrega fontes do Google Fonts. Essa conexão pode transmitir ao Google informações técnicas, como IP e características da solicitação. Links para Instagram e aplicativos bancários levam a ambientes com políticas próprias. O código do site fica no GitHub; os dados de cadastros e pedidos não são publicados nesse repositório.',
         'Prestadores podem processar informações fora do Brasil. O uso desses serviços deve respeitar as regras da LGPD para transferências internacionais e as garantias aplicáveis. Solicitações sobre esses tratamentos podem ser enviadas ao contato desta política.',
         'Informações podem ser compartilhadas com autoridades quando houver obrigação válida ou para exercício de direitos. Uma eventual necessidade de entrega por terceiro será informada antes de compartilhar os dados indispensáveis. Patrocinadores não recebem acesso à base de inscritos ou compradores.'
@@ -84,7 +85,7 @@ export const policies: Policy[] = [
         'Confira a descrição, o preço em reais, o tamanho, a quantidade e as informações de retirada ou entrega do produto.',
         'Antes de continuar, corrija eventuais erros nos campos e leia a política de trocas, devoluções e reembolsos.',
         'O resumo mostra o total dos produtos. Qualquer custo adicional de entrega ou outra cobrança precisa ser informado e aceito antes da contratação; não será incluído de surpresa.',
-        'Depois de enviar, guarde a referência do pedido. O acompanhamento é vinculado ao navegador utilizado. Caso perca o acesso, fale com o atendimento para localizar o pedido de forma segura.'
+        'Depois de enviar, guarde a referência do pedido. Pedidos feitos sem login são acompanhados no navegador utilizado. Ao comprar com uma conta autenticada, o pedido também fica vinculado ao identificador dessa conta. Pedidos anteriores só podem ser vinculados quando há o cookie original da compra e correspondência com o e-mail confirmado. Caso perca o acesso, fale com o atendimento para localizar o pedido de forma segura.'
       ], paragraphs: [
         'A oferta deve informar a disponibilidade e o prazo ou condição de retirada. Não há um prazo único para todos os produtos. Se faltar informação essencial, peça esclarecimento antes de pagar. Dificuldades de estoque ou erros na oferta serão tratados com o consumidor, preservando seus direitos; não autorizam mudança unilateral do preço de um pedido já contratado.'
       ]},
@@ -102,6 +103,7 @@ export const policies: Policy[] = [
         'Dúvidas, reclamações, correções e cancelamentos podem ser enviados ao e-mail publicado. A solicitação deve ser registrada e seu recebimento confirmado. O prazo de resposta às demandas de consumo é de até cinco dias, sem prejuízo de providências ou prazos legais mais favoráveis. Se necessário, o consumidor pode buscar o Procon ou a Justiça, preservadas as regras de competência que o protegem.'
       ]},
       {id: 'contas', title: 'Área restrita e disponibilidade', paragraphs: [
+        'A área do cliente é opcional e permite consultar pedidos vinculados à própria conta. As notificações são avisos internos do site sobre recebimento, pagamento e preparação; não são alertas por WhatsApp, push ou e-mail. Para exclusão da conta ou correção dos registros, utilize o atendimento. Não compartilhe sua senha. Criar uma conta de cliente não concede permissão administrativa.',
         'O painel da direção exige autenticação e autorização no servidor. Visitantes e compradores não precisam de uma conta administrativa. Tentativas de contornar o acesso são proibidas. Credenciais e recuperação de senha devem permanecer sob o controle do responsável autorizado.',
         'O serviço pode passar por manutenção ou interrupções. A direção deve tratar falhas e manter um canal de contato para pedidos em andamento. Indisponibilidade técnica não elimina obrigações já assumidas com compradores.'
       ]},
@@ -114,15 +116,15 @@ export const policies: Policy[] = [
   {
     slug: 'cookies', title: 'Aviso de cookies',
     description: 'Cookies de pedidos e autenticação, armazenamento de preferências e controles no navegador.',
-    summary: 'A versão atual usa cookies necessários ao pedido e ao login da direção. Não há cookies próprios de publicidade ou ferramentas de análise de audiência instaladas no código do site.',
+    summary: 'A versão atual usa cookies necessários ao pedido e ao login da direção e da área do cliente. Não há cookies próprios de publicidade ou ferramentas de análise de audiência instaladas no código do site.',
     sections: [
       {id: 'conceito', title: 'O que são e por que existem', paragraphs: [
         'Cookies são pequenos registros guardados pelo navegador e enviados ao site em determinadas conexões. Eles permitem, por exemplo, reconhecer a sessão de um pedido sem publicar seus dados. Armazenamento local é uma tecnologia diferente: ele guarda uma preferência no dispositivo, sem enviá-la automaticamente a cada solicitação.'
       ]},
       {id: 'inventario', title: 'Cookies e armazenamento utilizados', table: {headers: ['Nome', 'Uso', 'Duração no navegador'], rows: [
         ['__Host-maccoloco-shop', 'Identificador aleatório que permite consultar os pedidos feitos no mesmo navegador. Não contém nome, e-mail ou WhatsApp em texto.', 'Até 30 dias após a criação ou renovação ao enviar um pedido.'],
-        ['__Host-macco-access', 'Autenticação da área da direção. Criado apenas após login autorizado.', 'Até 1 hora; pode ser substituído durante a renovação da sessão.'],
-        ['__Host-macco-refresh', 'Renovação da sessão autenticada da direção.', 'Até 8 horas. O logout solicita a remoção dos cookies administrativos.'],
+        ['__Host-macco-access', 'Autenticação da direção ou da área do cliente. Criado após login com e-mail confirmado.', 'Até 1 hora; pode ser substituído durante a renovação da sessão.'],
+        ['__Host-macco-refresh', 'Renovação da sessão autenticada da direção ou do cliente.', 'Até 8 horas. O logout solicita a remoção dos cookies de autenticação.'],
         ['maccoloco-cookie-notice-v1 (armazenamento local)', 'Lembrar que o aviso de cookies foi fechado. Não autoriza rastreamento ou publicidade.', 'Até você remover os dados do site no navegador ou a versão do aviso mudar.']
       ]}, paragraphs: [
         'Os cookies de pedido e autenticação são usados no próprio domínio, com atributos de proteção no ambiente HTTPS. Eles não são criados apenas por ler uma notícia. A duração do cookie não corresponde ao prazo de conservação do registro de compra no banco de dados.'

@@ -3,13 +3,13 @@ import {getDb} from '../db';
 import {shopConfig,shopOrders,shopPayments,shopManualConfig} from '../db/schema';
 import {eq,sql} from 'drizzle-orm';
 import {getMaccolocoUser} from '../app/maccoloco-auth';
-import {isMaccoAdmin} from './admin-auth';
+import {hasPermission,type Permission} from './access-core';
 import {sha256,hmac,validatePayment,cents,orderPaymentStatus} from './payment-core';
 import {sealCredentials,openCredentials} from './credential-crypto';
 export class ShopError extends Error{constructor(public status:number,message:string){super(message);}}
 export const json=(data:unknown,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'same-origin'}});
-export async function isShopAdmin(){const u=await getMaccolocoUser();return Boolean(u&&isMaccoAdmin(u.email));}
-export async function adminOnly(request?:Request){if(request&&request.headers.get('origin')!==new URL(request.url).origin)throw new ShopError(403,'Origem não permitida.');if(!await isShopAdmin())throw new ShopError(403,'Acesso exclusivo da direção autorizada.');}
+export async function isShopAdmin(){const u=await getMaccolocoUser();return Boolean(u&&(['products','orders','payments'] as Permission[]).some(p=>hasPermission(u,p)));}
+export async function adminOnly(request?:Request,permission?:Permission){if(request&&request.headers.get('origin')!==new URL(request.url).origin)throw new ShopError(403,'Origem não permitida.');const user=await getMaccolocoUser();if(!user||(permission?!hasPermission(user,permission):!(['products','orders','payments'] as Permission[]).some(p=>hasPermission(user,p))))throw new ShopError(403,'Você não tem permissão para esta operação.');return user;}
 export function shopError(error:unknown){return error instanceof ShopError?json({error:error.message},error.status):json({error:'Não foi possível concluir agora. Tente novamente em instantes.'},503);}
 export async function readJSON(request:Request,max=12000){
  if(!request.headers.get('content-type')?.includes('application/json'))throw new ShopError(415,'Envie dados em JSON.');

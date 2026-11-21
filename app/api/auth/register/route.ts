@@ -1,0 +1,5 @@
+import {normalizedEmail,validEmail} from '../../../../lib/access-core';
+import {providerRequest,AuthError} from '../../../../lib/password-auth-core';
+import {authBody,authLimit,requireConfig,authJSON,authFailure} from '../../../../lib/password-auth-server';
+export const dynamic='force-dynamic';
+export async function POST(request:Request){try{const b=await authBody(request),config=requireConfig();await authLimit(request,'register',3,3600);const email=normalizedEmail(b.email);if(!validEmail(email)||typeof b.password!=='string'||b.password.length<14||b.password.length>128||b.password!==b.confirm)throw new AuthError(400,'Informe um e-mail válido e uma senha de 14 a 128 caracteres, com a mesma confirmação.');await providerRequest(config,'/signup?redirect_to='+encodeURIComponent(new URL(request.url).origin+'/minha-conta/entrar'),{method:'POST',body:{email,password:b.password}});return authJSON({ok:true,message:'Confira sua caixa de entrada para confirmar o e-mail. Se já tiver uma conta, use Entrar ou Esqueci minha senha.'});}catch(e){return authFailure(e);}}

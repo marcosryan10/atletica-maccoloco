@@ -6,16 +6,16 @@ import {join,resolve,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 const sqlite=new DatabaseSync(':memory:');
-for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql','0005_puzzling_dakota_north.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
+for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql','0005_puzzling_dakota_north.sql','0006_direction_and_customer_accounts.sql','0007_customer_order_index.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
 function prepared(sql,params=[]){return {bind(...p){return prepared(sql,p);},async all(){return {results:sqlite.prepare(sql).all(...params),success:true,meta:{}};},async first(){return sqlite.prepare(sql).get(...params)||null;},async raw(){const stmt=sqlite.prepare(sql);stmt.setReturnArrays(true);return stmt.all(...params);},async run(){const r=sqlite.prepare(sql).run(...params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)},results:[]};}};}
-globalThis.__manualShopTest={env:{DB:{prepare:prepared}},user:null};
+globalThis.__manualShopTest={env:{DB:{prepare:prepared,async batch(statements){sqlite.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.all());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}}}},user:null};
 const dir=await mkdtemp(join(tmpdir(),'macco-pix-test-'));
 try{
  const routes={checkout:'app/api/shop/checkout/route.ts',order:'app/api/shop/order/route.ts',admin:'app/api/admin/shop/route.ts',shop:'app/api/shop/route.ts'};
  const api={};
  for(const [name,path] of Object.entries(routes)){
  const outfile=join(dir,name+'.mjs');
- await build({entryPoints:[resolve(path)],outfile,bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'test-runtime',setup(b){b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'workers',namespace:'fixture'}));b.onResolve({filter:/maccoloco-auth$/},()=>({path:'identity',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='workers'?'export const env=globalThis.__manualShopTest.env;':'export async function getMaccolocoUser(){return globalThis.__manualShopTest.user;}',loader:'js'}));}}]});
+ await build({entryPoints:[resolve(path)],outfile,bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'test-runtime',setup(b){b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'workers',namespace:'fixture'}));b.onResolve({filter:/maccoloco-auth$/},()=>({path:'identity',namespace:'fixture'}));b.onResolve({filter:/identity-server$/},()=>({path:'customer',namespace:'fixture'}));b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='workers'?'export const env=globalThis.__manualShopTest.env;':a.path==='customer'?'export async function getAuthenticatedIdentity(){return globalThis.__manualShopTest.identity||null;}':'export async function getMaccolocoUser(){return globalThis.__manualShopTest.user;}',loader:'js'}));}}]});
  api[name]=await import(pathToFileURL(outfile));
  }
  const origin='https://test.maccoloco.example';
@@ -24,7 +24,7 @@ try{
  let r=await api.shop.GET();assert.equal((await r.json()).payment.checkoutEnabled,false);
  r=await api.admin.POST(post({action:'configure-manual',pixEnabled:false,cashEnabled:true}));assert.equal(r.status,403);
  assert.equal((await api.admin.POST(post({action:'category',name:'Canecas'}))).status,403);
- globalThis.__manualShopTest.user={email:'associacaoatleticamaccoloco@gmail.com',userId:'test-admin'};
+ globalThis.__manualShopTest.user={email:'associacaoatleticamaccoloco@gmail.com',userId:'test-admin',owner:true,permissions:['applications','news','events','partners','products','orders','payments']};
  assert.equal((await api.admin.POST(post({action:'category',name:'X'}))).status,400);
  let categoryResponse=await api.admin.POST(post({action:'category',name:'  Canecas   especiais  '}));assert.equal(categoryResponse.status,200);assert.equal((await categoryResponse.json()).name,'Canecas especiais');
  categoryResponse=await api.admin.POST(post({action:'category',name:'canecas especiais'}));assert.equal((await categoryResponse.json()).name,'Canecas especiais');
@@ -44,7 +44,7 @@ try{
  assert.equal((await api.order.GET(get('/api/shop/order?id='+result.orderId,'__Host-maccoloco-shop='+('a'.repeat(64))))).status,404);
  const confirmation={action:'confirm-manual',id:result.orderId,totalCents:9180,note:'Conferência de teste local',confirmReceived:true};
  assert.equal((await api.admin.POST(post(confirmation))).status,403);
- globalThis.__manualShopTest.user={email:'associacaoatleticamaccoloco@gmail.com',userId:'test-admin'};
+ globalThis.__manualShopTest.user={email:'associacaoatleticamaccoloco@gmail.com',userId:'test-admin',owner:true,permissions:['applications','news','events','partners','products','orders','payments']};
  assert.equal((await api.admin.POST(post({...configuration,pixKey:'a6295ee1-f054-47d1-9e90-ee57b74f60d9',receiverName:'NOVO TITULAR'}))).status,200);
  order=await (await api.order.GET(get('/api/shop/order?id='+result.orderId,cookie))).json();assert.equal(order.receiverName,'RECEBEDOR TESTE');
  assert.equal((await api.admin.POST(post({...confirmation,totalCents:1}))).status,409);

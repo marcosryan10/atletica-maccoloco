@@ -1,5 +1,6 @@
 import {env} from 'cloudflare:workers';
-import {adminEmail} from './maccoloco';
+import {directionForUser} from './direction-access';
+import {verifiedIdentity} from './access-core';
 import {sha256} from './payment-core';
 import {authConfig,AuthError,sessionCookies,expiredCookies,parseAuthCookies,providerRequest} from './password-auth-core';
 export function passwordAuthConfig(){const s=env as unknown as Record<string,string>;return authConfig(s.AUTH_SUPABASE_URL,s.AUTH_SUPABASE_KEY);}
@@ -11,6 +12,10 @@ export async function authLimit(request:Request,scope:string,max:number,seconds=
  if(!env.DB)throw new AuthError(503,'O acesso está temporariamente indisponível.');const now=Date.now(),bucket=Math.floor(now/(seconds*1000)),ip=request.headers.get('cf-connecting-ip')||'local';const id=await sha256('maccoloco-auth:'+scope+':'+new URL(request.url).hostname+':'+ip+':'+bucket);
  const row=await env.DB.prepare('INSERT INTO shop_rate_limits (id,hits,expires_at) VALUES (?,1,?) ON CONFLICT(id) DO UPDATE SET hits=hits+1 RETURNING hits').bind(id,(bucket+1)*seconds*1000).first<{hits:number}>();if(!row||row.hits>max)throw new AuthError(429,'Muitas tentativas. Aguarde alguns minutos antes de tentar novamente.');await env.DB.prepare('DELETE FROM shop_rate_limits WHERE expires_at < ?').bind(now).run();
 }
-export function applySession(response:Response,session:any){for(const cookie of sessionCookies(session,adminEmail))response.headers.append('Set-Cookie',cookie);return response;}
+export async function applySession(response:Response,session:any,audience:'direction'|'customer'='direction'){
+ if(!verifiedIdentity(session?.user))throw new AuthError(403,'Confirme seu e-mail para acessar.');
+ if(audience==='direction'&&!await directionForUser(session.user,true))throw new AuthError(403,'Este acesso não está autorizado pela direção.');
+ for(const cookie of sessionCookies(session,session.user.email.toLowerCase()))response.headers.append('Set-Cookie',cookie);return response;
+}
 export function clearSession(response:Response){for(const cookie of expiredCookies)response.headers.append('Set-Cookie',cookie);return response;}
-export async function refreshResponse(request:Request){const config=requireConfig(),tokens=parseAuthCookies(request.headers.get('cookie'));if(!tokens.refresh)throw new AuthError(401,'Sua sessão expirou. Entre novamente.');const session=await providerRequest(config,'/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:tokens.refresh}});return applySession(authJSON({ok:true}),session);}
+export async function refreshResponse(request:Request,audience:'direction'|'customer'='direction'){const config=requireConfig(),tokens=parseAuthCookies(request.headers.get('cookie'));if(!tokens.refresh)throw new AuthError(401,'Sua sessão expirou. Entre novamente.');const session=await providerRequest(config,'/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:tokens.refresh}});return applySession(authJSON({ok:true}),session,audience);}

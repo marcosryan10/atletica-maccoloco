@@ -20,7 +20,8 @@
     "test:password-auth": "node --experimental-strip-types tests/password-auth.mjs",
     "test:pix": "node --experimental-strip-types tests/manual-pix.mjs",
     "test:pix-flow": "node tests/manual-shop-flow.mjs",
-    "test:publications": "node tests/publication-images.mjs"
+    "test:publications": "node tests/publication-images.mjs",
+    "test:accounts": "node tests/accounts-access.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
