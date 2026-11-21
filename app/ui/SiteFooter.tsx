@@ -7,6 +7,6 @@ export default function SiteFooter({compact = false}: {compact?: boolean}) {
       <p className="policy-footer-label">Dúvidas e reclamações</p><p>{legalContact.organization}</p><p>Organização estudantil independente, sem CNPJ.</p>
       <address><a href={`mailto:${legalContact.email}`}>{legalContact.email}</a></address>
     </div><nav className="policy-footer-nav" aria-label="Políticas da MaccoLoco"><p className="policy-footer-label">Informações e direitos</p>{policyLinks.map(policy => <a key={policy.slug} href={`/${policy.slug}`}>{policy.title}</a>)}</nav></div>
-    <div className="policy-footer-bottom"><span>MaccoLoco · Almenara, Minas Gerais</span><a href="/produtos">Loja da Atlética</a></div>
+    <div className="policy-footer-bottom"><span>MaccoLoco · Almenara, Minas Gerais</span><a href="/produtos">Loja da Atlética</a><a href="https://www.linkedin.com/in/marcosryanl" target="_blank" rel="noopener noreferrer">Desenvolvido por Marcos Ryan Oliveira Porto</a></div>
   </div></footer>;
 }
