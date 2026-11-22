@@ -16,11 +16,13 @@ export const partners = sqliteTable('partners', {
  image:text('image').notNull(), url:text('url').notNull().default(''), published:integer('published').notNull().default(0), updatedAt:text('updated_at').notNull(),
 });
 export const shopProducts=sqliteTable('shop_products',{
+ ticketEventId:text('ticket_event_id'),
  id:text('id').primaryKey(),name:text('name').notNull(),category:text('category').notNull(),description:text('description').notNull(),
  priceCents:integer('price_cents'),image:text('image').notNull().default(''),sizes:text('sizes').notNull(),active:integer('active').notNull().default(0),
  illustration:text('illustration').notNull().default('other'),deliveryInfo:text('delivery_info').notNull().default(''),updatedAt:text('updated_at').notNull(),
 });
 export const shopOrders=sqliteTable('shop_orders',{
+ ticketEventId:text('ticket_event_id'),
  customerUserId:text('customer_user_id'),
  id:text('id').primaryKey(),requestKey:text('request_key').notNull(),ownerHash:text('owner_hash').notNull(),buyer:text('buyer').notNull(),email:text('email').notNull(),phone:text('phone').notNull(),
  productId:text('product_id').notNull(),productName:text('product_name').notNull(),size:text('size').notNull(),quantity:integer('quantity').notNull(),unitCents:integer('unit_cents').notNull(),totalCents:integer('total_cents').notNull(),
@@ -52,3 +54,18 @@ export const directionAccessAudit=sqliteTable('direction_access_audit',{
 export const customerNotifications=sqliteTable('customer_notifications',{
  id:text('id').primaryKey(),userId:text('user_id').notNull(),orderId:text('order_id').notNull(),eventKey:text('event_key').notNull().unique(),title:text('title').notNull(),body:text('body').notNull(),readAt:text('read_at'),createdAt:text('created_at').notNull(),
 },t=>[index('customer_notification_owner').on(t.userId,t.createdAt)]);
+
+export const ticketEvents=sqliteTable('ticket_events',{
+ id:text('id').primaryKey(),name:text('name').notNull(),startsAt:text('starts_at').notNull(),location:text('location').notNull().default(''),
+ salesOpen:integer('sales_open').notNull().default(1),updatedAt:text('updated_at').notNull(),
+});
+export const eventTickets=sqliteTable('event_tickets',{
+ id:integer('id').primaryKey({autoIncrement:true}),token:text('token').notNull().unique(),eventId:text('event_id').notNull(),orderId:text('order_id').notNull(),ordinal:integer('ordinal').notNull(),createdAt:text('created_at').notNull(),
+ usedAt:text('used_at'),usedBy:text('used_by'),checkinNonce:text('checkin_nonce'),revokedAt:text('revoked_at'),revokedBy:text('revoked_by'),revokeReason:text('revoke_reason'),
+},t=>[uniqueIndex('event_ticket_order_ordinal').on(t.orderId,t.ordinal),index('event_ticket_event').on(t.eventId,t.id)]);
+export const ticketDeliveries=sqliteTable('ticket_deliveries',{
+ orderId:text('order_id').primaryKey(),status:text('status').notNull().default('pending'),attempts:integer('attempts').notNull().default(0),lockToken:text('lock_token'),lockedAt:text('locked_at'),sentAt:text('sent_at'),lastError:text('last_error'),updatedAt:text('updated_at').notNull(),
+});
+export const ticketAudit=sqliteTable('ticket_audit',{
+ id:text('id').primaryKey(),ticketId:integer('ticket_id').notNull(),actor:text('actor').notNull(),action:text('action').notNull(),createdAt:text('created_at').notNull(),
+},t=>[index('ticket_audit_ticket').on(t.ticketId,t.createdAt)]);

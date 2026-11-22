@@ -1,3 +1,5 @@
+import {ticketIssueStatements} from '../../../../lib/tickets-server';
+import {deliverTicketEmail} from '../../../../lib/ticket-mail';
 import {getDb} from '../../../../db';
 import {shopProducts,shopOrders,shopManualConfig,shopCategories} from '../../../../db/schema';
 import {and,eq,desc,sql,like,or} from 'drizzle-orm';
@@ -20,7 +22,8 @@ export async function GET(request:Request){try{
  seeOrders?db.select({paidOrders:sql<number>`count(*)`,buyers:sql<number>`count(distinct ${shopOrders.email})`,units:sql<number>`coalesce(sum(${shopOrders.quantity}),0)`,grossCents:sql<number>`coalesce(sum(${shopOrders.totalCents}),0)`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))):Promise.resolve([{paidOrders:0,buyers:0,units:0,grossCents:0}]),
  seeOrders?db.select({name:shopOrders.productName,quantity:sql<number>`sum(${shopOrders.quantity})`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))).groupBy(shopOrders.productId,shopOrders.productName).orderBy(sql`sum(${shopOrders.quantity}) desc`).limit(10):Promise.resolve([]),
  hasPermission(actor,'payments')?manualConfig():Promise.resolve({pixEnabled:0,cashEnabled:0}),seeProducts?db.select().from(shopCategories):Promise.resolve([])]);
- return json({products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config,permissions:actor.permissions,categories:seeProducts?categoryNames([...categories,...savedCategories.map(c=>c.name),...products.map(p=>p.category)]):[]});
+ const ticketEvents=seeProducts?(await env.DB!.prepare('SELECT id,name,sales_open AS salesOpen FROM ticket_events ORDER BY starts_at DESC').all()).results:[];
+ return json({ticketEvents,products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config,permissions:actor.permissions,categories:seeProducts?categoryNames([...categories,...savedCategories.map(c=>c.name),...products.map(p=>p.category)]):[]});
  }catch(e){return shopError(e);}}
 export async function POST(request:Request){try{
  const b=await readJSON(request,720000),permission=shopPermission(b.action);if(!permission)throw new ShopError(400,'Ação inválida.');await adminOnly(request,permission);const db=getDb(),now=new Date().toISOString();
@@ -42,7 +45,9 @@ export async function POST(request:Request){try{
  if(bytes.length>500*1024||!(png||jpg||webp))throw new ShopError(400,'O arquivo não é uma imagem PNG, JPG ou WebP válida de até 500 KB.');
  if(env.BUCKET){const imageId=crypto.randomUUID();await env.BUCKET.put('shop/'+imageId,bytes,{httpMetadata:{contentType:'image/'+match[1]}});image='/api/shop/image?id='+imageId;}else if(bytes.length>200*1024){throw new ShopError(400,'Use uma imagem de até 200 KB.');}
  }
- const record={id,name,category,description,deliveryInfo,image,sizes:JSON.stringify(sizes),priceCents:price,active:p.active?1:0,illustration:['abada','tirante','other'].includes(p.illustration)?p.illustration:'other',updatedAt:now};
+ let ticketEventId:string|null=null;
+ if(p.ticketEventId===undefined){const [old]=await db.select({ticketEventId:shopProducts.ticketEventId}).from(shopProducts).where(eq(shopProducts.id,id));ticketEventId=old?.ticketEventId||null;}else if(p.ticketEventId){if(typeof p.ticketEventId!=='string'||p.ticketEventId.length>80||!await env.DB!.prepare('SELECT id FROM ticket_events WHERE id=?').bind(p.ticketEventId).first())throw new ShopError(400,'Selecione um evento válido para o ingresso.');ticketEventId=p.ticketEventId;}
+ const record={ticketEventId,id,name,category,description,deliveryInfo,image,sizes:JSON.stringify(sizes),priceCents:price,active:p.active?1:0,illustration:['abada','tirante','other'].includes(p.illustration)?p.illustration:'other',updatedAt:now};
  await db.insert(shopProducts).values(record).onConflictDoUpdate({target:shopProducts.id,set:record});return json({ok:true});
  }
  if(b.action==='delete-product'){if(typeof b.id!=='string')throw new ShopError(400,'Produto inválido.');await db.delete(shopProducts).where(eq(shopProducts.id,b.id));return json({ok:true});}
@@ -56,8 +61,8 @@ export async function POST(request:Request){try{
  const [order]=await db.select().from(shopOrders).where(eq(shopOrders.id,b.id));
  if(!order||!canConfirmManual(order)||b.totalCents!==order.totalCents)throw new ShopError(409,'Pedido indisponível para confirmação. Atualize a lista.');
  const user=await getMaccolocoUser();if(!user)throw new ShopError(403,'Acesso não autorizado.');
- const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET status=?,confirmed_at=?,confirmed_by=?,payment_note=?,updated_at=? WHERE id=? AND status=? AND payment_method=? RETURNING id').bind('paid',now,user.email,b.note.trim(),now,order.id,'pending',order.paymentMethod),orderNotification(order.id,'paid','Pagamento confirmado','A direção confirmou o recebimento. Acompanhe as próximas informações sobre seu pedido.',now)]);
- if(!results[0].results.length)throw new ShopError(409,'Este pedido já foi atualizado.');return json({ok:true});
+ const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET status=?,confirmed_at=?,confirmed_by=?,payment_note=?,updated_at=? WHERE id=? AND status=? AND payment_method=? RETURNING id').bind('paid',now,user.email,b.note.trim(),now,order.id,'pending',order.paymentMethod),orderNotification(order.id,'paid','Pagamento confirmado','A direção confirmou o recebimento. Acompanhe as próximas informações sobre seu pedido.',now),...ticketIssueStatements(order,now)]);
+ if(!results[0].results.length)throw new ShopError(409,'Este pedido já foi atualizado.');let ticketEmail;try{if(order.ticketEventId&&order.mode==='live')ticketEmail=await deliverTicketEmail(order.id);}catch{ticketEmail={status:'error'};}return json({ok:true,ticketEmail});
  }
  if(b.action==='configure-manual'){
  await limitShop(request,'admin-configure',10);

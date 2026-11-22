@@ -24,4 +24,5 @@ jobs:
       - run: npm run test:pix-flow
       - run: npm run test:publications
       - run: npm run test:accounts
+      - run: npm run test:tickets
       - run: npm run build

@@ -18,6 +18,8 @@ A ideia é concentrar em um só lugar as informações que antes ficavam espalha
 - Painel administrativo com contas individuais e permissões por integrante.
 - Conta principal da associação para liberar e revogar acessos da direção.
 - Área do cliente com pedidos próprios e notificações internas de atualização.
+- Ingressos numerados por unidade de combo pago, enviados por e-mail com QR Code.
+- Check-in pela câmera no painel da direção, com entrega única de pulseira e registro do responsável.
 
 No Pix, o comprador faz a transferência pelo aplicativo do banco. O pedido continua pendente até a direção conferir o recebimento e confirmar no painel. O sistema registra quem fez a confirmação, a data e uma referência da conferência.
 
@@ -77,3 +79,14 @@ Os dados da atlética ficam no D1. O Supabase Auth é usado para o login da dire
 As licenças e os avisos de autoria das bibliotecas e dos arquivos de terceiros permanecem nos respectivos arquivos.
 
 Contas de clientes não concedem acesso administrativo. A autorização da direção é consultada no servidor em cada operação. Pedidos de uma conta são consultados pelo identificador autenticado; o e-mail informado em um formulário não libera o histórico de compras. As notificações aparecem dentro da área pessoal, sem envio de push ou WhatsApp.
+
+
+## Ingressos dos combos
+
+Na direção, a aba **Ingressos e check-in** reúne os eventos com ingresso, compradores e entradas. Cadastre o evento e selecione-o no campo **Ingresso incluído por unidade**, na edição do produto. Produtos sem evento continuam funcionando como antes.
+
+A confirmação do pagamento emite os ingressos dentro da mesma transação do pedido. Cada unidade recebe um número e um QR Code aleatório. Reenviar o e-mail preserva esses códigos. Na entrada, a leitura apenas verifica o ingresso: o uso é registrado ao confirmar a entrega da pulseira. A atualização no banco impede duas entradas com o mesmo código, mesmo com leitores simultâneos. A portaria precisa de conexão com a internet.
+
+As permissões **Gerenciar eventos e ingressos dos combos** e **Ler ingressos e entregar pulseiras** são independentes e podem ser liberadas em Acessos da direção. A conta principal tem acesso às duas.
+
+O envio usa o Gmail da associação por SMTP. Configure `TICKET_SMTP_PASSWORD` como Secret do Worker na Cloudflare, com uma senha de app dessa conta. Não coloque a senha no repositório nem em variáveis públicas. O SMTP de autenticação do Supabase é separado. A aba de ingressos oferece um teste para o e-mail da associação; falhas de envio ficam registradas para reenvio. Enquanto o segredo não estiver configurado, novas compras de produtos com ingresso ficam bloqueadas.

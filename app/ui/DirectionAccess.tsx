@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 import {Plus,X,ShieldCheck,RefreshCw} from 'lucide-react';
 import {accessPermissions,allPermissions,type Permission} from '../../lib/access-core';
 type Member={id?:string;name:string;email:string;permissions:Permission[];active:boolean;activated?:boolean};
-const presets=[{name:'Esportes',permissions:['applications']},{name:'Comunicação',permissions:['news','events','partners']},{name:'Financeiro',permissions:['orders','payments']},{name:'Comercial',permissions:['products','partners']},{name:'Gestão geral',permissions:allPermissions}] as const;
+const presets=[{name:'Esportes',permissions:['applications']},{name:'Comunicação',permissions:['news','events','partners']},{name:'Financeiro',permissions:['orders','payments']},{name:'Comercial',permissions:['products','partners']},{name:'Portaria do evento',permissions:['checkin']},{name:'Organização de ingressos',permissions:['tickets']},{name:'Gestão geral',permissions:allPermissions}] as const;
 export default function DirectionAccess(){
  const [members,setMembers]=useState<Member[]>([]),[edit,setEdit]=useState<Member|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  async function load(){setError('');try{const r=await fetch('/api/admin/access',{cache:'no-store'}),v:any=await r.json();if(!r.ok)throw Error(v.error);setMembers(v.members);}catch(e){setError(e instanceof Error?e.message:'Não foi possível carregar os acessos.');}}

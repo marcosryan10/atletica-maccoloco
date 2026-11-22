@@ -1,3 +1,5 @@
+import {env} from 'cloudflare:workers';
+import {ticketMailConfigured} from '../../../../lib/ticket-mail';
 import {getDb} from '../../../../db';
 import {shopProducts,shopOrders} from '../../../../db/schema';
 import {and,eq} from 'drizzle-orm';
@@ -19,8 +21,9 @@ export async function POST(request:Request){try{
  const config=await manualConfig();if((method==='pix'&&!config.pixEnabled)||(method==='cash'&&!config.cashEnabled))throw new ShopError(503,'Esta forma de pagamento ainda não está disponível.');
  const [product]=await db.select().from(shopProducts).where(and(eq(shopProducts.id,b.productId),eq(shopProducts.active,1)));
  if(!product||!product.priceCents||product.priceCents<100||product.deliveryInfo.trim().length<5||!JSON.parse(product.sizes).includes(b.size))throw new ShopError(400,'Este produto, preço, retirada ou tamanho não está disponível.');
+ if(product.ticketEventId){const event=await env.DB!.prepare('SELECT id FROM ticket_events WHERE id=? AND sales_open=1').bind(product.ticketEventId).first();if(!event||!ticketMailConfigured())throw new ShopError(503,'As vendas de ingressos deste evento ainda não estão disponíveis.');}
  const id=crypto.randomUUID(),now=new Date().toISOString(),total=product.priceCents*b.quantity;
  const code=method==='pix'?pixPayload({key:config.pixKey,name:config.receiverName,city:config.receiverCity,cents:total,reference:'ML'+id.replace(/-/g,'').slice(0,23)}):null;
- const inserted=await db.insert(shopOrders).values({id,requestKey,ownerHash,customerUserId:identity?.id||null,buyer:name,email,phone,productId:product.id,productName:product.name,size:b.size,quantity:b.quantity,unitCents:product.priceCents,totalCents:total,status:'pending',mode:'live',paymentMethod:method,pixPayload:code,receiverName:method==='pix'?config.receiverName:null,deliveryInfo:product.deliveryInfo,consentAt:now,createdAt:now,updatedAt:now}).onConflictDoNothing({target:shopOrders.requestKey}).returning({id:shopOrders.id});
+ const inserted=await db.insert(shopOrders).values({id,requestKey,ownerHash,customerUserId:identity?.id||null,buyer:name,email,phone,ticketEventId:product.ticketEventId,productId:product.id,productName:product.name,size:b.size,quantity:b.quantity,unitCents:product.priceCents,totalCents:total,status:'pending',mode:'live',paymentMethod:method,pixPayload:code,receiverName:method==='pix'?config.receiverName:null,deliveryInfo:product.deliveryInfo,consentAt:now,createdAt:now,updatedAt:now}).onConflictDoNothing({target:shopOrders.requestKey}).returning({id:shopOrders.id});
  if(!inserted.length){const [saved]=await db.select({id:shopOrders.id}).from(shopOrders).where(eq(shopOrders.requestKey,requestKey));if(saved)return reply(saved.id);throw new ShopError(409,'O pedido já está sendo preparado.');}if(identity){try{await orderNotification(id,'created','Pedido recebido','Recebemos seu pedido de '+product.name+'. Acompanhe por aqui o pagamento e a preparação.',now).run();}catch{}}return reply(id);
  }catch(e){return shopError(e);}}

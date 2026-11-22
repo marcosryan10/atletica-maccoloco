@@ -1,4 +1,4 @@
-export type Product={id:string;name:string;category:string;description:string;price:number|null;image:string;sizes:string[];active:boolean;illustration:'abada'|'tirante'|'other';deliveryInfo?:string};
+export type Product={id:string;name:string;category:string;description:string;price:number|null;image:string;sizes:string[];active:boolean;illustration:'abada'|'tirante'|'other';ticketEventId?:string|null;deliveryInfo?:string};
 export const categories=['Roupas','Acessórios','Copos','Outros'];
 export const priceLabel=(value:number|null)=>value===null?'Preço a definir':new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(value);
 export function productView(row:any):Product{return {...row,price:row.priceCents===null?null:row.priceCents/100,sizes:JSON.parse(row.sizes),active:Boolean(row.active)};}
