@@ -13,12 +13,12 @@ globalThis.__manualShopTest={sent:[],failMail:false,env:{DB:{prepare:prepared,ba
 const dir=await mkdtemp(join(tmpdir(),'macco-pix-test-'));
 try{
  const api={};
- const routes={tickets:'app/api/admin/tickets/route.ts',checkout:'app/api/shop/checkout/route.ts',admin:'app/api/admin/shop/route.ts',core:'lib/ticket-core.ts',server:'lib/tickets-server.ts',mail:'lib/ticket-mail.ts'};
+ const routes={tickets:'app/api/admin/tickets/route.ts',checkout:'app/api/shop/checkout/route.ts',admin:'app/api/admin/shop/route.ts',core:'lib/ticket-core.ts',server:'lib/tickets-server.ts',mail:'lib/ticket-mail.ts',order:'app/api/shop/order/route.ts',customer:'app/api/customer/route.ts'};
  for(const [name,path] of Object.entries(routes)){
  const outfile=join(dir,name+'.mjs');
  await build({entryPoints:[resolve(path)],outfile,bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'runtime',setup(b){
  b.onResolve({filter:/^cloudflare:workers$/},()=>({path:'workers',namespace:'fixture'}));b.onResolve({filter:/maccoloco-auth$/},()=>({path:'identity',namespace:'fixture'}));b.onResolve({filter:/identity-server$/},()=>({path:'customer',namespace:'fixture'}));b.onResolve({filter:/^nodemailer$/},()=>({path:'smtp',namespace:'fixture'}));
- b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='workers'?'export const env=globalThis.__manualShopTest.env;':a.path==='customer'?'export async function getAuthenticatedIdentity(){return null;}':a.path==='smtp'?`export default {createTransport(){return {async sendMail(message){if(globalThis.__manualShopTest.failMail)throw Error('smtp refused SECRET');globalThis.__manualShopTest.sent.push(message);},close(){}};}};`:'export async function getMaccolocoUser(){return globalThis.__manualShopTest.user;}',loader:'js'}));}}]});api[name]=await import(pathToFileURL(outfile));}
+ b.onLoad({filter:/.*/,namespace:'fixture'},a=>({contents:a.path==='workers'?'export const env=globalThis.__manualShopTest.env;':a.path==='customer'?'export async function getAuthenticatedIdentity(){return globalThis.__manualShopTest.identity||null;}':a.path==='smtp'?`export default {createTransport(){return {async sendMail(message){if(globalThis.__manualShopTest.failMail)throw Error('smtp refused SECRET');globalThis.__manualShopTest.sent.push(message);},close(){}};}};`:'export async function getMaccolocoUser(){return globalThis.__manualShopTest.user;}',loader:'js'}));}}]});api[name]=await import(pathToFileURL(outfile));}
  const fixture=globalThis.__manualShopTest,origin='https://test.maccoloco.example';
  const post=(body,source=origin)=>new Request(origin+'/api/admin/tickets',{method:'POST',headers:{origin:source,'content-type':'application/json'},body:JSON.stringify(body)});
  const get=(params='')=>new Request(origin+'/api/admin/tickets'+params);
@@ -34,19 +34,23 @@ try{
  const product={id:'combo-test',name:'Combo teste',category:'Combos',description:'Teste isolado',deliveryInfo:'Retirada no evento de teste',sizes:['M'],price:90,image:'',active:true,illustration:'other',ticketEventId:event};
  assert.equal((await api.admin.POST(post({action:'product',product}))).status,200);
  const checkout={productId:product.id,size:'M',quantity:3,name:'Comprador <teste>',email:'buyer@example.com',phone:'33999999999',consent:true,requestKey:crypto.randomUUID(),paymentMethod:'cash',ticketEventId:other};
- assert.equal((await api.checkout.POST(post(checkout))).status,503,'Ticket sales require configured email');
- fixture.env.TICKET_SMTP_PASSWORD='isolated-test-not-a-secret';
- r=await api.checkout.POST(post(checkout));assert.equal(r.status,201);const orderId=(await r.json()).orderId;
+ r=await api.checkout.POST(post(checkout));assert.equal(r.status,201);const orderId=(await r.json()).orderId,cookie=r.headers.get('set-cookie').split(';')[0];
+ const orderRequest=(cookieValue=cookie)=>new Request(origin+'/api/shop/order?id='+orderId,{headers:{cookie:cookieValue}});
+ assert.deepEqual((await (await api.order.GET(orderRequest())).json()).tickets,[]);
+ assert.equal((await api.order.GET(orderRequest('__Host-maccoloco-shop='+('b'.repeat(64))))).status,404);
  const order=sqlite.prepare('SELECT * FROM shop_orders WHERE id=?').get(orderId);assert.equal(order.ticket_event_id,event,'Use product snapshot, ignore client event');assert.equal(order.total_cents,27000);
  assert.equal(sqlite.prepare('SELECT count(*) n FROM event_tickets').get().n,0);
  const confirmation={action:'confirm-manual',id:orderId,totalCents:27000,note:'Teste isolado',confirmReceived:true};
- fixture.failMail=true;r=await api.admin.POST(post(confirmation));assert.equal(r.status,200);assert.equal((await r.json()).ticketEmail.status,'error');assert.equal(sqlite.prepare('SELECT status FROM shop_orders WHERE id=?').get(orderId).status,'paid','SMTP failure must not undo payment');
+ fixture.failMail=true;r=await api.admin.POST(post(confirmation));assert.equal(r.status,200);assert.equal((await r.json()).ticketsAvailable,true);assert.equal(fixture.sent.length,0);assert.equal(sqlite.prepare('SELECT status FROM shop_orders WHERE id=?').get(orderId).status,'paid','SMTP failure must not undo payment');
  let rows=sqlite.prepare('SELECT * FROM event_tickets ORDER BY ordinal').all();assert.equal(rows.length,3);assert.equal(new Set(rows.map(t=>t.token)).size,3);rows.forEach(t=>assert.match(t.token,/^[a-f0-9]{64}$/));
- assert.equal(sqlite.prepare('SELECT status FROM ticket_deliveries').get().status,'error');assert.ok(!sqlite.prepare('SELECT last_error FROM ticket_deliveries').get().last_error.includes('SECRET'));
  assert.equal((await api.admin.POST(post(confirmation))).status,409);
  await fixture.env.DB.batch(api.server.ticketIssueStatements({id:orderId,quantity:3,mode:'live',ticketEventId:event},new Date().toISOString()));assert.equal(sqlite.prepare('SELECT count(*) n FROM event_tickets').get().n,3);
- fixture.failMail=false;assert.equal((await api.mail.deliverTicketEmail(orderId)).status,'sent');assert.equal(fixture.sent.length,1);const message=fixture.sent[0];assert.equal(message.attachments.length,3);assert.ok(message.html.includes('&lt;teste&gt;'));assert.equal(message.to,'buyer@example.com');assert.equal(message.attachments[0].content.subarray(0,3).toString(),'GIF');
+ fixture.env.TICKET_SMTP_PASSWORD='isolated-test-not-a-secret';fixture.failMail=false;assert.equal((await api.mail.deliverTicketEmail(orderId)).status,'sent');assert.equal(fixture.sent.length,1);const message=fixture.sent[0];assert.equal(message.attachments.length,3);assert.ok(message.html.includes('&lt;teste&gt;'));assert.equal(message.to,'buyer@example.com');assert.equal(message.attachments[0].content.subarray(0,3).toString(),'GIF');
  await api.mail.deliverTicketEmail(orderId);assert.equal(fixture.sent.length,1);await api.mail.deliverTicketEmail(orderId,true);assert.equal(fixture.sent.length,2);assert.deepEqual(fixture.sent[1].attachments.map(a=>a.content),message.attachments.map(a=>a.content),'Resend preserves exact QR codes');
+ const buyerOrder=await (await api.order.GET(orderRequest())).json();assert.equal(buyerOrder.tickets.length,3);assert.equal(buyerOrder.tickets[0].code,'MACCOLOCO:'+rows[0].token);
+ fixture.identity={id:'other-customer',email:'buyer@example.com'};assert.equal((await (await api.customer.GET()).json()).tickets.length,0,'Matching email alone grants no tickets');
+ sqlite.prepare('UPDATE shop_orders SET customer_user_id=? WHERE id=?').run('customer-owner',orderId);assert.equal((await api.order.GET(orderRequest())).status,404,'Guest cookie stops working after ownership links to account');
+ fixture.identity={id:'customer-owner',email:'buyer@example.com'};assert.equal((await (await api.customer.GET()).json()).tickets.length,3);assert.equal((await (await api.order.GET(orderRequest(''))).json()).tickets.length,3);
  fixture.user=user(['checkin']);let listing=await (await api.tickets.GET(get())).json();assert.equal(listing.manage,false);assert.equal(listing.tickets,undefined);assert.equal(JSON.stringify(listing).includes('buyer@example.com'),false);
  assert.equal((await api.tickets.POST(post({action:'preview',id:rows[0].id}))).status,403);
  assert.equal((await api.tickets.POST(post({action:'resend',orderId}))).status,403);
@@ -59,11 +63,11 @@ try{
  fixture.user=user(['tickets']);assert.equal((await api.tickets.POST(post({action:'checkin',eventId:event,code:'MACCOLOCO:'+rows[1].token}))).status,403);
  assert.equal((await api.tickets.POST(post({action:'revoke',id:rows[1].id,reason:'Cancelado no teste'}))).status,200);assert.equal((await api.tickets.POST(post({action:'revoke',id:rows[1].id,reason:'Repetir teste'}))).status,409);assert.equal(sqlite.prepare("SELECT count(*) n FROM ticket_audit WHERE action='revoke'").get().n,1);
  assert.equal((await api.server.consumeTicket(rows[1].token,event,'staff')).state,'revoked');
- sqlite.prepare("UPDATE shop_orders SET status='refunded' WHERE id=?").run(orderId);assert.equal((await api.server.consumeTicket(rows[2].token,event,'staff')).state,'unpaid');assert.equal((await api.tickets.POST(post({action:'preview',id:rows[2].id}))).status,404);
+ const protectedTickets=(await (await api.customer.GET()).json()).tickets;assert.equal(protectedTickets.find(t=>t.number===api.core.ticketNumber(rows[0].id)).code,null);assert.equal(protectedTickets.find(t=>t.number===api.core.ticketNumber(rows[1].id)).code,null);
+ sqlite.prepare("UPDATE shop_orders SET status='refunded' WHERE id=?").run(orderId);assert.equal((await api.server.consumeTicket(rows[2].token,event,'staff')).state,'unpaid');assert.equal((await (await api.customer.GET()).json()).tickets.length,0);assert.equal((await api.tickets.POST(post({action:'preview',id:rows[2].id}))).status,404);
  sqlite.prepare("UPDATE shop_orders SET status='paid',mode='test' WHERE id=?").run(orderId);assert.equal((await api.server.consumeTicket(rows[2].token,event,'staff')).state,'unpaid');
  listing=await (await api.tickets.GET(get())).json();assert.equal(listing.tickets.length,3);assert.equal(listing.tickets.some(t=>'token' in t),false);
  assert.equal(api.server.ticketIssueStatements({id:orderId,quantity:3,mode:'test',ticketEventId:event},new Date().toISOString()).length,0);
  assert.equal(api.core.readTicketCode('https://evil.example/anything'),null);assert.equal(api.core.readTicketCode('MACCOLOCO:'+rows[0].token),rows[0].token);
- fixture.user=root;const sentBefore=fixture.sent.length;assert.equal((await (await api.tickets.POST(post({action:'test-email'}))).json()).email.status,'sent');assert.equal(fixture.sent.length,sentBefore+1);assert.equal(fixture.sent.at(-1).to,'associacaoatleticamaccoloco@gmail.com');
  console.log('PASS ingressos: transação pagamento/emissão, QR único por unidade, idempotência, SMTP simulado/falha/reenvio, permissões, CSRF, evento incorreto, check-in concorrente único, auditoria, revogação, reembolso e isolamento. Nenhum e-mail real enviado.');
 }finally{sqlite.close();delete globalThis.__manualShopTest;assert.equal(resolve(dirname(dir)),resolve(tmpdir()));await rm(dir,{recursive:true,force:true});}

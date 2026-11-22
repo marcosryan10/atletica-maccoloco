@@ -1,5 +1,4 @@
 import {ticketIssueStatements} from '../../../../lib/tickets-server';
-import {deliverTicketEmail} from '../../../../lib/ticket-mail';
 import {getDb} from '../../../../db';
 import {shopProducts,shopOrders,shopManualConfig,shopCategories} from '../../../../db/schema';
 import {and,eq,desc,sql,like,or} from 'drizzle-orm';
@@ -61,8 +60,8 @@ export async function POST(request:Request){try{
  const [order]=await db.select().from(shopOrders).where(eq(shopOrders.id,b.id));
  if(!order||!canConfirmManual(order)||b.totalCents!==order.totalCents)throw new ShopError(409,'Pedido indisponível para confirmação. Atualize a lista.');
  const user=await getMaccolocoUser();if(!user)throw new ShopError(403,'Acesso não autorizado.');
- const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET status=?,confirmed_at=?,confirmed_by=?,payment_note=?,updated_at=? WHERE id=? AND status=? AND payment_method=? RETURNING id').bind('paid',now,user.email,b.note.trim(),now,order.id,'pending',order.paymentMethod),orderNotification(order.id,'paid','Pagamento confirmado','A direção confirmou o recebimento. Acompanhe as próximas informações sobre seu pedido.',now),...ticketIssueStatements(order,now)]);
- if(!results[0].results.length)throw new ShopError(409,'Este pedido já foi atualizado.');let ticketEmail;try{if(order.ticketEventId&&order.mode==='live')ticketEmail=await deliverTicketEmail(order.id);}catch{ticketEmail={status:'error'};}return json({ok:true,ticketEmail});
+ const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET status=?,confirmed_at=?,confirmed_by=?,payment_note=?,updated_at=? WHERE id=? AND status=? AND payment_method=? RETURNING id').bind('paid',now,user.email,b.note.trim(),now,order.id,'pending',order.paymentMethod),orderNotification(order.id,'paid','Pagamento confirmado',order.ticketEventId?'Pagamento confirmado. Seus ingressos estão disponíveis na página do pedido e em Meus ingressos.':'A direção confirmou o recebimento. Acompanhe as próximas informações sobre seu pedido.',now),...ticketIssueStatements(order,now)]);
+ if(!results[0].results.length)throw new ShopError(409,'Este pedido já foi atualizado.');return json({ok:true,ticketsAvailable:!!order.ticketEventId&&order.mode==='live'});
  }
  if(b.action==='configure-manual'){
  await limitShop(request,'admin-configure',10);
