@@ -2,7 +2,7 @@ import {ticketIssueStatements} from '../../../../lib/tickets-server';
 import {getDb} from '../../../../db';
 import {shopProducts,shopOrders,shopManualConfig,shopCategories} from '../../../../db/schema';
 import {and,eq,desc,sql,like,or} from 'drizzle-orm';
-import {adminOnly,json,shopError,ShopError,readJSON,manualConfig,limitShop} from '../../../../lib/shop-server';
+import {adminOnly,json,shopError,ShopError,readJSON,manualConfig,limitShop,sha256} from '../../../../lib/shop-server';
 import {productView,categories,categoryId,categoryNames} from '../../../../lib/shop';
 import {cents} from '../../../../lib/payment-core';
 import {productTemplates} from '../../../../lib/shop-templates';
@@ -22,10 +22,10 @@ export async function GET(request:Request){try{
  seeOrders?db.select({name:shopOrders.productName,quantity:sql<number>`sum(${shopOrders.quantity})`}).from(shopOrders).where(and(eq(shopOrders.mode,mode),eq(shopOrders.status,'paid'))).groupBy(shopOrders.productId,shopOrders.productName).orderBy(sql`sum(${shopOrders.quantity}) desc`).limit(10):Promise.resolve([]),
  hasPermission(actor,'payments')?manualConfig():Promise.resolve({pixEnabled:0,cashEnabled:0}),seeProducts?db.select().from(shopCategories):Promise.resolve([])]);
  const ticketEvents=seeProducts?(await env.DB!.prepare('SELECT id,name,sales_open AS salesOpen FROM ticket_events ORDER BY starts_at DESC').all()).results:[];
- return json({ticketEvents,products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config,permissions:actor.permissions,categories:seeProducts?categoryNames([...categories,...savedCategories.map(c=>c.name),...products.map(p=>p.category)]):[]});
+ return json({canConfigurePayments:actor.owner,ticketEvents,products:products.map(productView),orders,total:counts[0].count,stats:stats[0],ranking,config,permissions:actor.permissions,categories:seeProducts?categoryNames([...categories,...savedCategories.map(c=>c.name),...products.map(p=>p.category)]):[]});
  }catch(e){return shopError(e);}}
 export async function POST(request:Request){try{
- const b=await readJSON(request,720000),permission=shopPermission(b.action);if(!permission)throw new ShopError(400,'Ação inválida.');await adminOnly(request,permission);const db=getDb(),now=new Date().toISOString();
+ const actor=await adminOnly(request);const b=await readJSON(request,720000),permission=shopPermission(b.action);if(!permission)throw new ShopError(400,'Ação inválida.');await adminOnly(request,permission);const db=getDb(),now=new Date().toISOString();
  if(b.action==='category'){
  const name=typeof b.name==='string'?b.name.replace(/\s+/g,' ').trim():'';if(name.length<2||name.length>40||/[\u0000-\u001f\u007f]/.test(name))throw new ShopError(400,'Use um nome de categoria com 2 a 40 caracteres.');
  const id=categoryId(name),builtin=categories.find(c=>categoryId(c)===id);if(builtin)return json({ok:true,name:builtin});
@@ -59,16 +59,19 @@ export async function POST(request:Request){try{
  if(typeof b.id!=='string'||typeof b.note!=='string'||b.note.trim().length<3||b.note.length>160||b.confirmReceived!==true)throw new ShopError(400,'Confirme o recebimento e registre uma referência da conferência.');
  const [order]=await db.select().from(shopOrders).where(eq(shopOrders.id,b.id));
  if(!order||!canConfirmManual(order)||b.totalCents!==order.totalCents)throw new ShopError(409,'Pedido indisponível para confirmação. Atualize a lista.');
- const user=await getMaccolocoUser();if(!user)throw new ShopError(403,'Acesso não autorizado.');
- const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET status=?,confirmed_at=?,confirmed_by=?,payment_note=?,updated_at=? WHERE id=? AND status=? AND payment_method=? RETURNING id').bind('paid',now,user.email,b.note.trim(),now,order.id,'pending',order.paymentMethod),orderNotification(order.id,'paid','Pagamento confirmado',order.ticketEventId?'Pagamento confirmado. Seus ingressos estão disponíveis na página do pedido e em Meus ingressos.':'A direção confirmou o recebimento. Acompanhe as próximas informações sobre seu pedido.',now),...ticketIssueStatements(order,now)]);
+ const user=await getMaccolocoUser();if(!user||!hasPermission(user,'payments'))throw new ShopError(403,'Acesso não autorizado.');
+ const results=await env.DB!.batch([env.DB!.prepare('UPDATE shop_orders SET status=?,confirmed_at=?,confirmed_by=?,payment_note=?,updated_at=? WHERE id=? AND status=? AND payment_method=? AND total_cents=? AND mode=? RETURNING id').bind('paid',now,user.email,b.note.trim(),now,order.id,'pending',order.paymentMethod,order.totalCents,order.mode),orderNotification(order.id,'paid','Pagamento confirmado',order.ticketEventId?'Pagamento confirmado. Seus ingressos estão disponíveis na página do pedido e em Meus ingressos.':'A direção confirmou o recebimento. Acompanhe as próximas informações sobre seu pedido.',now),...ticketIssueStatements(order,now)]);
  if(!results[0].results.length)throw new ShopError(409,'Este pedido já foi atualizado.');return json({ok:true,ticketsAvailable:!!order.ticketEventId&&order.mode==='live'});
  }
  if(b.action==='configure-manual'){
+ if(!actor.owner)throw new ShopError(403,'Somente a conta principal pode configurar os recebimentos.');
  await limitShop(request,'admin-configure',10);
  const pixKey=typeof b.pixKey==='string'?b.pixKey.trim():'',receiverName=typeof b.receiverName==='string'?b.receiverName.trim():'',receiverCity=typeof b.receiverCity==='string'?b.receiverCity.trim():'';
  if(pixKey.length>77||receiverName.length>120||receiverCity.length>80||typeof b.pixEnabled!=='boolean'||typeof b.cashEnabled!=='boolean'||(pixKey&&!validPixKey(pixKey))||(b.pixEnabled&&(!validPixKey(pixKey)||!pixText(receiverName,25)||!pixText(receiverCity,15)||b.confirmReceiver!==true)))throw new ShopError(400,'Confira a chave Pix, titular, cidade e a autorização do recebedor.');
  const row={id:'manual',pixKey,receiverName,receiverCity,pixEnabled:b.pixEnabled?1:0,cashEnabled:b.cashEnabled?1:0,updatedAt:now};
- await db.insert(shopManualConfig).values(row).onConflictDoUpdate({target:shopManualConfig.id,set:row});return json({ok:true});
+ const update=db.insert(shopManualConfig).values(row).onConflictDoUpdate({target:shopManualConfig.id,set:row}).toSQL();
+ const fingerprint=await sha256(JSON.stringify([pixKey,receiverName,receiverCity]));
+ await env.DB!.batch([env.DB!.prepare(update.sql).bind(...update.params),env.DB!.prepare('INSERT INTO payment_config_audit(id,actor_id,actor_email,receiver_fingerprint,pix_enabled,cash_enabled,created_at) VALUES (?,?,?,?,?,?,?)').bind(crypto.randomUUID(),actor.userId,actor.email,fingerprint,row.pixEnabled,row.cashEnabled,now)]);return json({ok:true});
  }
  throw new ShopError(400,'Ação inválida.');
  }catch(e){return shopError(e);}}

@@ -6,7 +6,7 @@ import {join,resolve,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 const sqlite=new DatabaseSync(':memory:');
-for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql','0005_puzzling_dakota_north.sql','0006_direction_and_customer_accounts.sql','0007_customer_order_index.sql','0008_event_tickets.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
+for(const p of (await readdir(new URL('../drizzle/',import.meta.url))).filter(p=>/^\d{4}_.*\.sql$/.test(p)).sort())sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
 function prepared(sql,params=[]){return {bind(...p){return prepared(sql,p);},async all(){return {results:sqlite.prepare(sql).all(...params),success:true,meta:{}};},async first(){return sqlite.prepare(sql).get(...params)||null;},async raw(){const stmt=sqlite.prepare(sql);stmt.setReturnArrays(true);return stmt.all(...params);},async run(){const r=sqlite.prepare(sql).run(...params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)},results:[]};}};}
 let batchQueue=Promise.resolve();
 globalThis.__manualShopTest={sent:[],failMail:false,env:{DB:{prepare:prepared,batch(statements){const task=batchQueue.then(async()=>{sqlite.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.all());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}});batchQueue=task.catch(()=>{});return task;}}},user:null};
@@ -22,7 +22,7 @@ try{
  const fixture=globalThis.__manualShopTest,origin='https://test.maccoloco.example';
  const post=(body,source=origin)=>new Request(origin+'/api/admin/tickets',{method:'POST',headers:{origin:source,'content-type':'application/json'},body:JSON.stringify(body)});
  const get=(params='')=>new Request(origin+'/api/admin/tickets'+params);
- const root={email:'owner@example.com',owner:true,permissions:[]};
+ const root={userId:'owner-uuid',email:'owner@example.com',owner:true,permissions:[]};
  const user=permissions=>({email:'staff@example.com',owner:false,permissions});
  assert.equal((await api.tickets.GET(get())).status,403);
  fixture.user=user(['products']);assert.equal((await api.tickets.GET(get())).status,403);

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
-import {readFile,mkdtemp,rm} from 'node:fs/promises';
+import {readFile,mkdtemp,rm,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join,resolve,dirname} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 const sqlite=new DatabaseSync(':memory:');
-for(const p of ['0000_misty_lady_mastermind.sql','0001_charming_zaran.sql','0002_redundant_radioactive_man.sql','0003_ancient_mulholland_black.sql','0004_redundant_owl.sql','0005_puzzling_dakota_north.sql','0006_direction_and_customer_accounts.sql','0007_customer_order_index.sql','0008_event_tickets.sql'])sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
+for(const p of (await readdir(new URL('../drizzle/',import.meta.url))).filter(p=>/^\d{4}_.*\.sql$/.test(p)).sort())sqlite.exec(await readFile(new URL('../drizzle/'+p,import.meta.url),'utf8'));
 function prepared(sql,params=[]){return {bind(...p){return prepared(sql,p);},async all(){return {results:sqlite.prepare(sql).all(...params),success:true,meta:{}};},async first(){return sqlite.prepare(sql).get(...params)||null;},async raw(){const stmt=sqlite.prepare(sql);stmt.setReturnArrays(true);return stmt.all(...params);},async run(){const r=sqlite.prepare(sql).run(...params);return {success:true,meta:{changes:Number(r.changes),last_row_id:Number(r.lastInsertRowid)},results:[]};}};}
 globalThis.__manualShopTest={env:{DB:{prepare:prepared,async batch(statements){sqlite.exec('BEGIN');try{const results=[];for(const s of statements)results.push(await s.all());sqlite.exec('COMMIT');return results;}catch(e){sqlite.exec('ROLLBACK');throw e;}}}},user:null};
 const dir=await mkdtemp(join(tmpdir(),'macco-pix-test-'));
@@ -55,8 +55,10 @@ try{
  result=await (await api.admin.GET(get('/api/admin/shop'))).json();assert.equal(result.products.length,1);assert.deepEqual(result.orders,[]);assert.equal(result.config.pixKey,undefined);
  assert.equal((await api.admin.POST(post({action:'configure-manual',cashEnabled:true,pixEnabled:false}))).status,403);
  fixture.user={...root,owner:false,permissions:['payments']};
+ assert.equal((await api.admin.POST(post({action:'configure-manual',cashEnabled:true,pixEnabled:false}))).status,403);
+ assert.equal(sqlite.prepare('SELECT count(*) n FROM payment_config_audit').get().n,1);
  assert.equal((await api.admin.POST(post({action:'product',product}))).status,403);
- result=await (await api.admin.GET(get('/api/admin/shop'))).json();assert.deepEqual(result.products,[]);
+ result=await (await api.admin.GET(get('/api/admin/shop'))).json();assert.deepEqual(result.products,[]);assert.equal(result.canConfigurePayments,false);
  fixture.user=null;
  const alice=identity('alice-uuid','alice@example.com'),bob=identity('bob-uuid','bob@example.com');fixture.identity=alice;
  const input={productId:product.id,size:'M',quantity:1,name:'Comprador Teste',email:alice.email,phone:'33999999999',consent:true,requestKey:crypto.randomUUID(),paymentMethod:'cash'};

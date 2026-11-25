@@ -69,3 +69,7 @@ export const ticketDeliveries=sqliteTable('ticket_deliveries',{
 export const ticketAudit=sqliteTable('ticket_audit',{
  id:text('id').primaryKey(),ticketId:integer('ticket_id').notNull(),actor:text('actor').notNull(),action:text('action').notNull(),createdAt:text('created_at').notNull(),
 },t=>[index('ticket_audit_ticket').on(t.ticketId,t.createdAt)]);
+
+export const paymentConfigAudit=sqliteTable('payment_config_audit',{
+ id:text('id').primaryKey(),actorId:text('actor_id').notNull(),actorEmail:text('actor_email').notNull(),receiverFingerprint:text('receiver_fingerprint').notNull(),pixEnabled:integer('pix_enabled').notNull(),cashEnabled:integer('cash_enabled').notNull(),createdAt:text('created_at').notNull(),
+},t=>[index('payment_config_audit_created').on(t.createdAt)]);
