@@ -61,6 +61,7 @@ try{
  assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',crypto.randomUUID(),start-1)).state,'not_started');
  assert.equal(sqlite.prepare('SELECT count(*) n FROM bar_redemptions').get().n,0);
  await api.barServer.barLookup(passes[0].token,event,start);assert.equal(sqlite.prepare('SELECT last_served_at FROM bar_passes WHERE id=?').get(passes[0].id).last_served_at,null,'Lookup never consumes');
+ sqlite.prepare('UPDATE ticket_events SET bar_starts_at=?,bar_ends_at=? WHERE id=?').run('2027-01-16T17:00:00Z','2027-01-16T19:00:00Z',event);
  const receipt=crypto.randomUUID();const drinks=await Promise.all([api.barServer.redeemBar(passes[0].token,event,'bar',receipt,start),api.barServer.redeemBar(passes[0].token,event,'other-bar',crypto.randomUUID(),start)]);
  assert.deepEqual(drinks.map(d=>d.state).sort(),['cooldown','served']);assert.equal(sqlite.prepare('SELECT count(*) n FROM bar_redemptions').get().n,1);
  assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',receipt,start+480000)).state,'already_recorded','Replaying a receipt after cooldown cannot deliver again');
