@@ -3,7 +3,7 @@ export const accessPermissions = [
   {id:'news',label:'Notícias'}, {id:'events',label:'Eventos'},
   {id:'partners',label:'Parceiros'}, {id:'products',label:'Produtos e categorias'},
   {id:'orders',label:'Pedidos e vendas'}, {id:'payments',label:'Confirmar pagamentos'},
-  {id:'tickets',label:'Gerenciar eventos e ingressos dos combos'}, {id:'checkin',label:'Ler ingressos e entregar pulseiras'},
+  {id:'tickets',label:'Gerenciar eventos e ingressos'}, {id:'checkin',label:'Ler ingressos e entregar pulseiras'}, {id:'bar',label:'Open bar: conferir passes e entregar bebidas'},
 ] as const;
 export type Permission = typeof accessPermissions[number]['id'];
 export const allPermissions = accessPermissions.map(p=>p.id);

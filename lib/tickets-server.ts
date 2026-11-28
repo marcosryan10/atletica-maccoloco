@@ -5,6 +5,7 @@ type Order={id:string;ticketEventId?:string|null;quantity:number;mode:string};
 export function ticketIssueStatements(order:Order,now:string){
  if(!order.ticketEventId||order.mode!=='live')return [];
  return [...Array.from({length:order.quantity},(_,i)=>env.DB!.prepare("INSERT OR IGNORE INTO event_tickets(token,event_id,order_id,ordinal,created_at) SELECT ?,ticket_event_id,id,?,? FROM shop_orders WHERE id=? AND status='paid' AND mode='live' AND ticket_event_id IS NOT NULL").bind(newTicketToken(),i+1,now,order.id)),
+ env.DB!.prepare("INSERT OR IGNORE INTO bar_passes(token,entrance_ticket_id,created_at) SELECT lower(hex(randomblob(32))),t.id,? FROM event_tickets t JOIN shop_orders o ON o.id=t.order_id WHERE o.id=? AND o.includes_open_bar=1 AND o.status='paid' AND o.mode='live' AND t.revoked_at IS NULL").bind(now,order.id),
  env.DB!.prepare("INSERT OR IGNORE INTO ticket_deliveries(order_id,status,updated_at) SELECT id,'pending',? FROM shop_orders WHERE id=? AND status='paid' AND mode='live' AND ticket_event_id IS NOT NULL").bind(now,order.id)];
 }
 export async function ticketLookup(token:string,eventId:string){

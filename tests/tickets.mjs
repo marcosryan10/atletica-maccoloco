@@ -13,7 +13,7 @@ globalThis.__manualShopTest={sent:[],failMail:false,env:{DB:{prepare:prepared,ba
 const dir=await mkdtemp(join(tmpdir(),'macco-pix-test-'));
 try{
  const api={};
- const routes={tickets:'app/api/admin/tickets/route.ts',checkout:'app/api/shop/checkout/route.ts',admin:'app/api/admin/shop/route.ts',core:'lib/ticket-core.ts',server:'lib/tickets-server.ts',mail:'lib/ticket-mail.ts',order:'app/api/shop/order/route.ts',customer:'app/api/customer/route.ts'};
+ const routes={bar:'app/api/admin/bar/route.ts',barServer:'lib/bar-server.ts',barCore:'lib/bar-core.ts',tickets:'app/api/admin/tickets/route.ts',checkout:'app/api/shop/checkout/route.ts',admin:'app/api/admin/shop/route.ts',core:'lib/ticket-core.ts',server:'lib/tickets-server.ts',mail:'lib/ticket-mail.ts',order:'app/api/shop/order/route.ts',customer:'app/api/customer/route.ts'};
  for(const [name,path] of Object.entries(routes)){
  const outfile=join(dir,name+'.mjs');
  await build({entryPoints:[resolve(path)],outfile,bundle:true,platform:'node',format:'esm',logLevel:'silent',plugins:[{name:'runtime',setup(b){
@@ -31,7 +31,8 @@ try{
  let r=await api.tickets.POST(post({action:'event',name:'Evento teste',startsAt:'2027-01-15T22:00:00-03:00',location:'Almenara',salesOpen:true}));assert.equal(r.status,200);const event=(await r.json()).id;
  r=await api.tickets.POST(post({action:'event',name:'Outro evento',startsAt:'2027-01-16T20:00:00-03:00',location:'Outro local',salesOpen:false}));const other=(await r.json()).id;
  await api.admin.POST(post({action:'configure-manual',cashEnabled:true,pixEnabled:false}));
- const product={id:'combo-test',name:'Combo teste',category:'Combos',description:'Teste isolado',deliveryInfo:'Retirada no evento de teste',sizes:['M'],price:90,image:'',active:true,illustration:'other',ticketEventId:event};
+ assert.equal((await api.bar.POST(post({action:'schedule',eventId:event,startsAt:'2027-01-16T14:00:00-03:00',endsAt:'2027-01-16T16:00:00-03:00'}))).status,200);
+ const product={includesOpenBar:true,id:'combo-test',name:'Combo teste',category:'Combos',description:'Teste isolado',deliveryInfo:'Retirada no evento de teste',sizes:['M'],price:90,image:'',active:true,illustration:'other',ticketEventId:event};
  assert.equal((await api.admin.POST(post({action:'product',product}))).status,200);
  const checkout={productId:product.id,size:'M',quantity:3,name:'Comprador <teste>',email:'buyer@example.com',phone:'33999999999',consent:true,requestKey:crypto.randomUUID(),paymentMethod:'cash',ticketEventId:other};
  r=await api.checkout.POST(post(checkout));assert.equal(r.status,201);const orderId=(await r.json()).orderId,cookie=r.headers.get('set-cookie').split(';')[0];
@@ -51,7 +52,32 @@ try{
  fixture.identity={id:'other-customer',email:'buyer@example.com'};assert.equal((await (await api.customer.GET()).json()).tickets.length,0,'Matching email alone grants no tickets');
  sqlite.prepare('UPDATE shop_orders SET customer_user_id=? WHERE id=?').run('customer-owner',orderId);assert.equal((await api.order.GET(orderRequest())).status,404,'Guest cookie stops working after ownership links to account');
  fixture.identity={id:'customer-owner',email:'buyer@example.com'};assert.equal((await (await api.customer.GET()).json()).tickets.length,3);assert.equal((await (await api.order.GET(orderRequest(''))).json()).tickets.length,3);
- fixture.user=user(['checkin']);let listing=await (await api.tickets.GET(get())).json();assert.equal(listing.manage,false);assert.equal(listing.tickets,undefined);assert.equal(JSON.stringify(listing).includes('buyer@example.com'),false);
+ const passes=sqlite.prepare('SELECT * FROM bar_passes ORDER BY id').all();assert.equal(passes.length,3);assert.equal(new Set([...passes,...rows].map(p=>p.token)).size,6);
+ assert.equal((await (await api.customer.GET()).json()).barPasses.length,3);
+ fixture.identity={id:'intruder',email:'buyer@example.com'};assert.equal((await (await api.customer.GET()).json()).barPasses.length,0);fixture.identity={id:'customer-owner',email:'buyer@example.com'};
+ const start=Date.parse('2027-01-16T17:00:00Z'),end=Date.parse('2027-01-16T19:00:00Z'),barCode='MACCOLOCO-BAR:'+passes[0].token;
+ assert.equal(api.barCore.readBarCode('MACCOLOCO:'+rows[0].token),null);assert.equal(api.core.readTicketCode(barCode),null);assert.equal(api.barCore.readBarCode(barCode),passes[0].token);
+ assert.equal((await api.barServer.barLookup(passes[0].token,other,start)).state,'wrong_event');
+ assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',crypto.randomUUID(),start-1)).state,'not_started');
+ assert.equal(sqlite.prepare('SELECT count(*) n FROM bar_redemptions').get().n,0);
+ await api.barServer.barLookup(passes[0].token,event,start);assert.equal(sqlite.prepare('SELECT last_served_at FROM bar_passes WHERE id=?').get(passes[0].id).last_served_at,null,'Lookup never consumes');
+ const receipt=crypto.randomUUID();const drinks=await Promise.all([api.barServer.redeemBar(passes[0].token,event,'bar',receipt,start),api.barServer.redeemBar(passes[0].token,event,'other-bar',crypto.randomUUID(),start)]);
+ assert.deepEqual(drinks.map(d=>d.state).sort(),['cooldown','served']);assert.equal(sqlite.prepare('SELECT count(*) n FROM bar_redemptions').get().n,1);
+ assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',receipt,start+480000)).state,'already_recorded','Replaying a receipt after cooldown cannot deliver again');
+ assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',crypto.randomUUID(),start+479999)).state,'cooldown');
+ assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',crypto.randomUUID(),start+480000)).state,'served');
+ assert.equal((await api.barServer.redeemBar(passes[2].token,event,'bar',crypto.randomUUID(),end-1)).state,'served','Each purchased unit has its own interval');
+ assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',crypto.randomUUID(),end)).state,'ended');
+ fixture.user=user(['bar']);assert.equal((await api.tickets.GET(get())).status,403);
+ const barListing=await (await api.bar.GET()).json();assert.equal(barListing.manage,false);assert.equal(JSON.stringify(barListing).includes('buyer@example.com'),false);
+ assert.equal((await api.bar.POST(post({action:'schedule',eventId:event,startsAt:new Date(start).toISOString(),endsAt:new Date(end).toISOString()}))).status,403);
+ assert.equal((await api.bar.POST(post({action:'lookup',eventId:event,code:'MACCOLOCO:'+rows[0].token}))).status,400);
+ assert.equal((await api.bar.POST(post({action:'redeem',eventId:event,code:barCode,requestId:crypto.randomUUID(),confirmDelivery:false}))).status,400);
+ assert.equal((await api.bar.POST(post({action:'lookup',eventId:event,code:barCode},'https://evil.example'))).status,403);
+ assert.equal((await api.barServer.barLookup(passes[0].token,event,start+960000)).state,'ready','Entrance check-in does not consume open bar');
+ fixture.user=user(['tickets']);assert.equal((await api.bar.POST(post({action:'lookup',eventId:event,code:barCode}))).status,403);
+ assert.equal((await api.bar.POST(post({action:'schedule',eventId:event,startsAt:new Date(start).toISOString(),endsAt:new Date(end).toISOString()}))).status,409,'Window locks after first delivery');
+ fixture.user=user(['checkin']);assert.equal((await api.bar.GET()).status,403);let listing=await (await api.tickets.GET(get())).json();assert.equal(listing.manage,false);assert.equal(listing.tickets,undefined);assert.equal(JSON.stringify(listing).includes('buyer@example.com'),false);
  assert.equal((await api.tickets.POST(post({action:'preview',id:rows[0].id}))).status,403);
  assert.equal((await api.tickets.POST(post({action:'resend',orderId}))).status,403);
  assert.equal((await api.tickets.POST(post({action:'test-email'}))).status,403);
@@ -62,12 +88,38 @@ try{
  const concurrent=await Promise.all([api.tickets.POST(post({action:'checkin',eventId:event,code})),api.tickets.POST(post({action:'checkin',eventId:event,code}))]);const states=await Promise.all(concurrent.map(r=>r.json()));assert.deepEqual(states.map(s=>s.state).sort(),['checked_in','used']);assert.equal(sqlite.prepare("SELECT count(*) n FROM ticket_audit WHERE action='checkin'").get().n,1);
  fixture.user=user(['tickets']);assert.equal((await api.tickets.POST(post({action:'checkin',eventId:event,code:'MACCOLOCO:'+rows[1].token}))).status,403);
  assert.equal((await api.tickets.POST(post({action:'revoke',id:rows[1].id,reason:'Cancelado no teste'}))).status,200);assert.equal((await api.tickets.POST(post({action:'revoke',id:rows[1].id,reason:'Repetir teste'}))).status,409);assert.equal(sqlite.prepare("SELECT count(*) n FROM ticket_audit WHERE action='revoke'").get().n,1);
- assert.equal((await api.server.consumeTicket(rows[1].token,event,'staff')).state,'revoked');
+ assert.equal((await api.server.consumeTicket(rows[1].token,event,'staff')).state,'revoked');assert.equal((await api.barServer.redeemBar(passes[1].token,event,'bar',crypto.randomUUID(),start)).state,'revoked');
  const protectedTickets=(await (await api.customer.GET()).json()).tickets;assert.equal(protectedTickets.find(t=>t.number===api.core.ticketNumber(rows[0].id)).code,null);assert.equal(protectedTickets.find(t=>t.number===api.core.ticketNumber(rows[1].id)).code,null);
  sqlite.prepare("UPDATE shop_orders SET status='refunded' WHERE id=?").run(orderId);assert.equal((await api.server.consumeTicket(rows[2].token,event,'staff')).state,'unpaid');assert.equal((await (await api.customer.GET()).json()).tickets.length,0);assert.equal((await api.tickets.POST(post({action:'preview',id:rows[2].id}))).status,404);
+ assert.equal((await api.barServer.redeemBar(passes[0].token,event,'bar',crypto.randomUUID(),start+960000)).state,'unavailable');
  sqlite.prepare("UPDATE shop_orders SET status='paid',mode='test' WHERE id=?").run(orderId);assert.equal((await api.server.consumeTicket(rows[2].token,event,'staff')).state,'unpaid');
  listing=await (await api.tickets.GET(get())).json();assert.equal(listing.tickets.length,3);assert.equal(listing.tickets.some(t=>'token' in t),false);
  assert.equal(api.server.ticketIssueStatements({id:orderId,quantity:3,mode:'test',ticketEventId:event},new Date().toISOString()).length,0);
  assert.equal(api.core.readTicketCode('https://evil.example/anything'),null);assert.equal(api.core.readTicketCode('MACCOLOCO:'+rows[0].token),rows[0].token);
+ fixture.user=root;fixture.identity=null;
+ const plain={...product,id:'avulso-test',name:'Abadá',includesOpenBar:false};assert.equal((await api.admin.POST(post({action:'product',product:plain}))).status,200);
+ r=await api.checkout.POST(post({...checkout,productId:plain.id,includesOpenBar:true,quantity:1,requestKey:crypto.randomUUID()}));assert.equal(r.status,201);const plainOrder=(await r.json()).orderId;
+ assert.equal(sqlite.prepare('SELECT includes_open_bar FROM shop_orders WHERE id=?').get(plainOrder).includes_open_bar,0,'Client cannot grant open bar');
+ assert.equal((await api.admin.POST(post({action:'confirm-manual',id:plainOrder,totalCents:9000,note:'Teste avulso',confirmReceived:true}))).status,200);
+ assert.equal(sqlite.prepare('SELECT count(*) n FROM event_tickets WHERE order_id=?').get(plainOrder).n,1);assert.equal(sqlite.prepare('SELECT count(*) n FROM bar_passes p JOIN event_tickets t ON t.id=p.entrance_ticket_id WHERE t.order_id=?').get(plainOrder).n,0);
+ assert.equal((await api.admin.POST(post({action:'product',product:{...plain,includesOpenBar:true}}))).status,200);assert.equal(sqlite.prepare('SELECT includes_open_bar FROM shop_orders WHERE id=?').get(plainOrder).includes_open_bar,0,'Editing product does not rewrite prior order entitlement');
+ const legacy=new DatabaseSync(':memory:');try{
+ const files=(await readdir(new URL('../drizzle/',import.meta.url))).filter(p=>/^\d{4}_.*\.sql$/.test(p)).sort();for(const file of files.filter(f=>!f.startsWith('0010_')))legacy.exec(await readFile(new URL('../drizzle/'+file,import.meta.url),'utf8'));
+ const insertLegacy=(table,row)=>{const keys=legacy.prepare('PRAGMA table_info('+table+')').all().map(c=>c.name).filter(k=>row[k]!==undefined);legacy.prepare('INSERT INTO '+table+' ('+keys.join(',')+') VALUES ('+keys.map(()=>'?').join(',')+')').run(...keys.map(k=>row[k]));};
+ const historicEvent='c04674c3-7120-4e12-b00f-624ff36cc453',historicCombo='f0781071-2c7c-4200-b6fb-2496d5317952';
+ insertLegacy('ticket_events',{...sqlite.prepare('SELECT * FROM ticket_events WHERE id=?').get(event),id:historicEvent});
+ insertLegacy('shop_products',{...sqlite.prepare('SELECT * FROM shop_products WHERE id=?').get(product.id),id:historicCombo,ticket_event_id:historicEvent});
+ insertLegacy('shop_orders',{...sqlite.prepare('SELECT * FROM shop_orders WHERE id=?').get(orderId),ticket_event_id:historicEvent,product_id:historicCombo,status:'paid',mode:'live'});
+ insertLegacy('shop_orders',{...sqlite.prepare('SELECT * FROM shop_orders WHERE id=?').get(plainOrder),ticket_event_id:historicEvent,product_id:'avulso'});
+ insertLegacy('event_tickets',{...rows[0],event_id:historicEvent,used_at:'2027-01-16T16:00:00.000Z'});
+ const plainTicket=sqlite.prepare('SELECT * FROM event_tickets WHERE order_id=?').get(plainOrder);insertLegacy('event_tickets',{...plainTicket,event_id:historicEvent});
+ const migration=await readFile(new URL('../drizzle/0010_separate_open_bar_passes.sql',import.meta.url),'utf8');legacy.exec(migration);
+ assert.equal(legacy.prepare('SELECT count(*) n FROM bar_passes').get().n,1,'Historical paid combos, including used entrance tickets, receive one pass');
+ const originalPass=legacy.prepare('SELECT token FROM bar_passes').get().token;
+ legacy.exec(migration.slice(migration.indexOf('UPDATE ticket_events')));assert.equal(legacy.prepare('SELECT count(*) n FROM bar_passes').get().n,1);assert.equal(legacy.prepare('SELECT token FROM bar_passes').get().token,originalPass);
+ assert.equal(legacy.prepare('SELECT token FROM event_tickets WHERE id=?').get(rows[0].id).token,rows[0].token,'Historical entrance QR preserved');
+ assert.equal(legacy.prepare('SELECT includes_open_bar FROM shop_orders WHERE id=?').get(plainOrder).includes_open_bar,0);
+ }finally{legacy.close();}
+ console.log('PASS open bar: entitlement snapshot, separate QR codes, ownership, role permissions, CSRF, two-hour window boundaries, 8-minute interval, lookup without consumption, concurrent deliveries, audit, receipt replay, revoked/refunded/test orders, independent entrance and per-unit passes.');
  console.log('PASS ingressos: transação pagamento/emissão, QR único por unidade, idempotência, SMTP simulado/falha/reenvio, permissões, CSRF, evento incorreto, check-in concorrente único, auditoria, revogação, reembolso e isolamento. Nenhum e-mail real enviado.');
 }finally{sqlite.close();delete globalThis.__manualShopTest;assert.equal(resolve(dirname(dir)),resolve(tmpdir()));await rm(dir,{recursive:true,force:true});}

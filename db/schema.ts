@@ -16,13 +16,13 @@ export const partners = sqliteTable('partners', {
  image:text('image').notNull(), url:text('url').notNull().default(''), published:integer('published').notNull().default(0), updatedAt:text('updated_at').notNull(),
 });
 export const shopProducts=sqliteTable('shop_products',{
- ticketEventId:text('ticket_event_id'),
+ ticketEventId:text('ticket_event_id'), includesOpenBar:integer('includes_open_bar').notNull().default(0),
  id:text('id').primaryKey(),name:text('name').notNull(),category:text('category').notNull(),description:text('description').notNull(),
  priceCents:integer('price_cents'),image:text('image').notNull().default(''),sizes:text('sizes').notNull(),active:integer('active').notNull().default(0),
  illustration:text('illustration').notNull().default('other'),deliveryInfo:text('delivery_info').notNull().default(''),updatedAt:text('updated_at').notNull(),
 });
 export const shopOrders=sqliteTable('shop_orders',{
- ticketEventId:text('ticket_event_id'),
+ ticketEventId:text('ticket_event_id'), includesOpenBar:integer('includes_open_bar').notNull().default(0),
  customerUserId:text('customer_user_id'),
  id:text('id').primaryKey(),requestKey:text('request_key').notNull(),ownerHash:text('owner_hash').notNull(),buyer:text('buyer').notNull(),email:text('email').notNull(),phone:text('phone').notNull(),
  productId:text('product_id').notNull(),productName:text('product_name').notNull(),size:text('size').notNull(),quantity:integer('quantity').notNull(),unitCents:integer('unit_cents').notNull(),totalCents:integer('total_cents').notNull(),
@@ -57,7 +57,7 @@ export const customerNotifications=sqliteTable('customer_notifications',{
 
 export const ticketEvents=sqliteTable('ticket_events',{
  id:text('id').primaryKey(),name:text('name').notNull(),startsAt:text('starts_at').notNull(),location:text('location').notNull().default(''),
- salesOpen:integer('sales_open').notNull().default(1),updatedAt:text('updated_at').notNull(),
+ barStartsAt:text('bar_starts_at'),barEndsAt:text('bar_ends_at'),salesOpen:integer('sales_open').notNull().default(1),updatedAt:text('updated_at').notNull(),
 });
 export const eventTickets=sqliteTable('event_tickets',{
  id:integer('id').primaryKey({autoIncrement:true}),token:text('token').notNull().unique(),eventId:text('event_id').notNull(),orderId:text('order_id').notNull(),ordinal:integer('ordinal').notNull(),createdAt:text('created_at').notNull(),
@@ -73,3 +73,10 @@ export const ticketAudit=sqliteTable('ticket_audit',{
 export const paymentConfigAudit=sqliteTable('payment_config_audit',{
  id:text('id').primaryKey(),actorId:text('actor_id').notNull(),actorEmail:text('actor_email').notNull(),receiverFingerprint:text('receiver_fingerprint').notNull(),pixEnabled:integer('pix_enabled').notNull(),cashEnabled:integer('cash_enabled').notNull(),createdAt:text('created_at').notNull(),
 },t=>[index('payment_config_audit_created').on(t.createdAt)]);
+
+export const barPasses=sqliteTable('bar_passes',{
+ id:integer('id').primaryKey({autoIncrement:true}),token:text('token').notNull().unique(),entranceTicketId:integer('entrance_ticket_id').notNull().unique(),createdAt:text('created_at').notNull(),lastServedAt:integer('last_served_at'),lastServedBy:text('last_served_by'),redemptionNonce:text('redemption_nonce'),
+});
+export const barRedemptions=sqliteTable('bar_redemptions',{
+ id:text('id').primaryKey(),passId:integer('pass_id').notNull(),actor:text('actor').notNull(),servedAt:integer('served_at').notNull(),
+},t=>[index('bar_redemptions_pass').on(t.passId,t.servedAt)]);

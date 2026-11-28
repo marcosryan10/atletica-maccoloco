@@ -71,6 +71,13 @@
       "when": 1795608906150,
       "tag": "0009_payment_security",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795792453938,
+      "tag": "0010_separate_open_bar_passes",
+      "breakpoints": true
     }
   ]
 }

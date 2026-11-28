@@ -27,7 +27,7 @@ export async function POST(request:Request){try{
  const user=await actor(request),b=await readJSON(request),now=new Date().toISOString();
  if(['lookup','checkin'].includes(b.action)){
  if(!hasPermission(user,'checkin'))throw new ShopError(403,'Seu acesso não permite fazer check-in.');
- await limitShop(request,'ticket-scan',300);const token=readTicketCode(b.code);if(!token||!uuid(b.eventId))throw new ShopError(400,'Leia um QR Code MaccoLoco válido e selecione o evento.');
+ await limitShop(request,'ticket-scan',300);const token=readTicketCode(b.code);if(!token||!uuid(b.eventId))throw new ShopError(400,typeof b.code==='string'&&b.code.startsWith('MACCOLOCO-BAR:')?'Este é um passe de open bar. Use a aba Open bar.':'Leia um QR Code MaccoLoco válido e selecione o evento.');
  return json(b.action==='lookup'?await ticketLookup(token,b.eventId):await consumeTicket(token,b.eventId,user.email));
  }
  if(!hasPermission(user,'tickets'))throw new ShopError(403,'Seu acesso não permite gerenciar ingressos.');

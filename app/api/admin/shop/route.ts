@@ -46,7 +46,11 @@ export async function POST(request:Request){try{
  }
  let ticketEventId:string|null=null;
  if(p.ticketEventId===undefined){const [old]=await db.select({ticketEventId:shopProducts.ticketEventId}).from(shopProducts).where(eq(shopProducts.id,id));ticketEventId=old?.ticketEventId||null;}else if(p.ticketEventId){if(typeof p.ticketEventId!=='string'||p.ticketEventId.length>80||!await env.DB!.prepare('SELECT id FROM ticket_events WHERE id=?').bind(p.ticketEventId).first())throw new ShopError(400,'Selecione um evento válido para o ingresso.');ticketEventId=p.ticketEventId;}
- const record={ticketEventId,id,name,category,description,deliveryInfo,image,sizes:JSON.stringify(sizes),priceCents:price,active:p.active?1:0,illustration:['abada','tirante','other'].includes(p.illustration)?p.illustration:'other',updatedAt:now};
+ const [previous]=await db.select({includesOpenBar:shopProducts.includesOpenBar}).from(shopProducts).where(eq(shopProducts.id,id));
+ if(p.includesOpenBar!==undefined&&typeof p.includesOpenBar!=='boolean')throw new ShopError(400,'Informe se o produto inclui open bar.');
+ const includesOpenBar=ticketEventId?(p.includesOpenBar===undefined?previous?.includesOpenBar||0:p.includesOpenBar?1:0):0;
+ if(includesOpenBar&&!await env.DB!.prepare('SELECT id FROM ticket_events WHERE id=? AND bar_starts_at IS NOT NULL AND bar_ends_at IS NOT NULL').bind(ticketEventId).first())throw new ShopError(400,'Configure o horário do open bar na aba Open bar antes de vincular o combo.');
+ const record={includesOpenBar,ticketEventId,id,name,category,description,deliveryInfo,image,sizes:JSON.stringify(sizes),priceCents:price,active:p.active?1:0,illustration:['abada','tirante','other'].includes(p.illustration)?p.illustration:'other',updatedAt:now};
  await db.insert(shopProducts).values(record).onConflictDoUpdate({target:shopProducts.id,set:record});return json({ok:true});
  }
  if(b.action==='delete-product'){if(typeof b.id!=='string')throw new ShopError(400,'Produto inválido.');await db.delete(shopProducts).where(eq(shopProducts.id,b.id));return json({ok:true});}
